@@ -268,7 +268,7 @@ function WorkoutPage() {
             strokeLinecap="round"
             strokeDasharray={2 * Math.PI * 46}
             strokeDashoffset={2 * Math.PI * 46 * (1 - progress)}
-            style={{ transition: "stroke-dashoffset 1s linear" }}
+            
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
