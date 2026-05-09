@@ -295,21 +295,24 @@ function DoneScreen({
           <span>Brutal</span>
         </div>
       </div>
+      )}
 
       <div className="mt-auto space-y-3">
         <button
           onClick={onSave}
-          disabled={difficulty == null}
+          disabled={!test && difficulty == null}
           className="w-full rounded-2xl bg-primary text-primary-foreground py-5 font-display font-bold text-xl disabled:opacity-40 disabled:cursor-not-allowed transition-transform active:scale-[0.98]"
         >
-          Save
+          {test ? "Done" : "Save"}
         </button>
-        <Link
-          to="/"
-          className="block text-center text-sm text-muted-foreground py-2"
-        >
-          Skip
-        </Link>
+        {!test && (
+          <Link
+            to="/"
+            className="block text-center text-sm text-muted-foreground py-2"
+          >
+            Skip
+          </Link>
+        )}
       </div>
     </main>
   );
