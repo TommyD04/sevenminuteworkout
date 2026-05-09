@@ -170,6 +170,17 @@ function WorkoutPage() {
   }, []);
 
 
+  function quit() {
+    if (confirm("Quit this workout? Progress won't be saved.")) {
+      navigate({ to: "/" });
+    }
+  }
+
+  function skip() {
+    // Force phase to end immediately
+    phaseStartRef.current = performance.now() - phaseDuration(phaseRef.current) * 1000;
+  }
+
   function saveAndExit() {
     if (test) {
       navigate({ to: "/" });
@@ -199,9 +210,6 @@ function WorkoutPage() {
   const current = EXERCISES[index];
   const next = EXERCISES[index + 1];
   const Icon = current.icon;
-  const total =
-    phase === "work" ? WORK_SECONDS : phase === "rest" ? REST_SECONDS : READY_SECONDS;
-  const progress = Math.max(0, Math.min(1, (total - remaining) / total));
   const ringColor =
     phase === "work"
       ? "var(--primary)"
