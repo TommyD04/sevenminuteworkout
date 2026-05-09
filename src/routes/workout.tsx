@@ -184,7 +184,7 @@ function WorkoutPage() {
         className="text-center text-xs uppercase tracking-[0.3em] font-mono mb-4"
         style={{ color: ringColor }}
       >
-        {phase === "work" ? "Work" : "Rest"}
+        {phase === "work" ? "Work" : phase === "rest" ? "Rest" : "Get Ready"}
       </p>
 
       {/* Timer ring */}
@@ -227,10 +227,18 @@ function WorkoutPage() {
           <Icon className="w-10 h-10" strokeWidth={1.5} />
         </div>
         <h2 className="font-display font-bold text-3xl leading-tight">
-          {phase === "work" ? current.name : "Catch your breath"}
+          {phase === "work"
+            ? current.name
+            : phase === "ready"
+              ? `First up: ${current.name}`
+              : "Catch your breath"}
         </h2>
         <p className="text-sm text-muted-foreground mt-2 min-h-[2.5rem]">
-          {phase === "work" ? current.tip : `Up next: ${next?.name ?? "—"}`}
+          {phase === "work"
+            ? current.tip
+            : phase === "ready"
+              ? current.tip
+              : `Up next: ${next?.name ?? "—"}`}
         </p>
       </div>
 
