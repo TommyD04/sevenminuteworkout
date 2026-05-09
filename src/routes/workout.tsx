@@ -147,9 +147,15 @@ function WorkoutPage() {
   const current = EXERCISES[index];
   const next = EXERCISES[index + 1];
   const Icon = current.icon;
-  const total = phase === "work" ? WORK_SECONDS : REST_SECONDS;
+  const total =
+    phase === "work" ? WORK_SECONDS : phase === "rest" ? REST_SECONDS : READY_SECONDS;
   const progress = Math.max(0, Math.min(1, (total - remaining) / total));
-  const ringColor = phase === "work" ? "var(--primary)" : "var(--rest)";
+  const ringColor =
+    phase === "work"
+      ? "var(--primary)"
+      : phase === "rest"
+        ? "var(--rest)"
+        : "var(--primary)";
 
   return (
     <main className="min-h-screen flex flex-col px-6 pt-8 pb-8 max-w-md mx-auto">
