@@ -31,6 +31,7 @@ type WakeLockSentinelLike = { release: () => Promise<void> };
 
 function WorkoutPage() {
   const navigate = useNavigate();
+  const { test } = Route.useSearch();
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("work");
   const [remaining, setRemaining] = useState(WORK_SECONDS);
@@ -113,6 +114,10 @@ function WorkoutPage() {
   }
 
   function saveAndExit() {
+    if (test) {
+      navigate({ to: "/" });
+      return;
+    }
     if (difficulty == null) return;
     saveSession({
       id: crypto.randomUUID(),
@@ -124,7 +129,14 @@ function WorkoutPage() {
   }
 
   if (done) {
-    return <DoneScreen difficulty={difficulty} setDifficulty={setDifficulty} onSave={saveAndExit} />;
+    return (
+      <DoneScreen
+        test={test}
+        difficulty={difficulty}
+        setDifficulty={setDifficulty}
+        onSave={saveAndExit}
+      />
+    );
   }
 
   const current = EXERCISES[index];
