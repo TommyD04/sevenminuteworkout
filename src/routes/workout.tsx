@@ -78,7 +78,12 @@ function WorkoutPage() {
     }
     if (remaining <= 0) {
       // transition
-      if (phase === "work") {
+      if (phase === "ready") {
+        setPhase("work");
+        setRemaining(WORK_SECONDS);
+        startBeep();
+        speak(`Go. ${EXERCISES[0].name}.`);
+      } else if (phase === "work") {
         const isLast = index === EXERCISES.length - 1;
         if (isLast) {
           finishBeep();
