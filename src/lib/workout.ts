@@ -37,9 +37,10 @@ export const EXERCISES: Exercise[] = [
 
 export const WORK_SECONDS = 30;
 export const REST_SECONDS = 10;
+export const READY_SECONDS = 5;
 export const TOTAL_SECONDS =
   EXERCISES.length * WORK_SECONDS + (EXERCISES.length - 1) * REST_SECONDS;
 
-export type Phase = "work" | "rest" | "done";
+export type Phase = "ready" | "work" | "rest" | "done";
 
 export const FlameIcon = Flame;

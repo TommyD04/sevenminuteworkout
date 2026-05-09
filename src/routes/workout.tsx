@@ -5,6 +5,7 @@ import {
   EXERCISES,
   WORK_SECONDS,
   REST_SECONDS,
+  READY_SECONDS,
   type Phase,
 } from "@/lib/workout";
 import {
@@ -33,8 +34,8 @@ function WorkoutPage() {
   const navigate = useNavigate();
   const { test } = Route.useSearch();
   const [index, setIndex] = useState(0);
-  const [phase, setPhase] = useState<Phase>("work");
-  const [remaining, setRemaining] = useState(WORK_SECONDS);
+  const [phase, setPhase] = useState<Phase>("ready");
+  const [remaining, setRemaining] = useState(READY_SECONDS);
   const [paused, setPaused] = useState(false);
   const [done, setDone] = useState(false);
   const [difficulty, setDifficulty] = useState<number | null>(null);
@@ -44,8 +45,7 @@ function WorkoutPage() {
   // Wake lock + audio unlock
   useEffect(() => {
     unlockAudio();
-    speak("Get ready. Jumping jacks.");
-    startBeep();
+    speak("Get ready. Jumping jacks in five.");
     const nav = navigator as Navigator & {
       wakeLock?: { request: (t: "screen") => Promise<WakeLockSentinelLike> };
     };
