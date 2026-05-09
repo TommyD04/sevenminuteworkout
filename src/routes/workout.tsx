@@ -153,8 +153,15 @@ function WorkoutPage() {
         <button onClick={quit} className="p-2 -ml-2 text-muted-foreground active:text-foreground">
           <X className="w-6 h-6" />
         </button>
-        <div className="font-mono text-xs uppercase tracking-wider text-muted-foreground tabular">
-          {index + 1} / {EXERCISES.length}
+        <div className="font-mono text-xs uppercase tracking-wider text-muted-foreground tabular flex items-center gap-2">
+          {test && (
+            <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/40 tracking-widest">
+              TEST
+            </span>
+          )}
+          <span>
+            {index + 1} / {EXERCISES.length}
+          </span>
         </div>
         <button onClick={skip} className="p-2 -mr-2 text-muted-foreground active:text-foreground">
           <SkipForward className="w-6 h-6" />
@@ -231,10 +238,12 @@ function WorkoutPage() {
 }
 
 function DoneScreen({
+  test,
   difficulty,
   setDifficulty,
   onSave,
 }: {
+  test: boolean;
   difficulty: number | null;
   setDifficulty: (n: number) => void;
   onSave: () => void;
@@ -243,21 +252,24 @@ function DoneScreen({
     <main className="min-h-screen flex flex-col px-6 pt-12 pb-8 max-w-md mx-auto">
       <div className="text-center mb-10">
         <p className="text-xs uppercase tracking-[0.3em] font-mono text-primary">
-          Complete
+          {test ? "Test complete" : "Complete"}
         </p>
         <h1 className="font-display font-bold text-6xl leading-[0.95] mt-3">
           Nice
           <br />
           work<span className="text-primary">.</span>
         </h1>
-        <p className="text-muted-foreground mt-4">7 minutes well spent.</p>
+        <p className="text-muted-foreground mt-4">
+          {test ? "Test run — nothing was saved." : "7 minutes well spent."}
+        </p>
       </div>
 
-      <div className="rounded-3xl bg-card border border-border p-6 mb-6">
-        <p className="text-sm text-muted-foreground uppercase tracking-wider mb-4 text-center">
-          How hard was that?
-        </p>
-        <div className="flex justify-between gap-2">
+      {!test && (
+        <div className="rounded-3xl bg-card border border-border p-6 mb-6">
+          <p className="text-sm text-muted-foreground uppercase tracking-wider mb-4 text-center">
+            How hard was that?
+          </p>
+          <div className="flex justify-between gap-2">
           {[1, 2, 3, 4, 5].map((n) => (
             <button
               key={n}
