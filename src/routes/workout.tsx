@@ -5,6 +5,7 @@ import {
   EXERCISES,
   WORK_SECONDS,
   REST_SECONDS,
+  READY_SECONDS,
   type Phase,
 } from "@/lib/workout";
 import {
@@ -33,8 +34,8 @@ function WorkoutPage() {
   const navigate = useNavigate();
   const { test } = Route.useSearch();
   const [index, setIndex] = useState(0);
-  const [phase, setPhase] = useState<Phase>("work");
-  const [remaining, setRemaining] = useState(WORK_SECONDS);
+  const [phase, setPhase] = useState<Phase>("ready");
+  const [remaining, setRemaining] = useState(READY_SECONDS);
   const [paused, setPaused] = useState(false);
   const [done, setDone] = useState(false);
   const [difficulty, setDifficulty] = useState<number | null>(null);
@@ -44,8 +45,7 @@ function WorkoutPage() {
   // Wake lock + audio unlock
   useEffect(() => {
     unlockAudio();
-    speak("Get ready. Jumping jacks.");
-    startBeep();
+    speak("Get ready. Jumping jacks in five.");
     const nav = navigator as Navigator & {
       wakeLock?: { request: (t: "screen") => Promise<WakeLockSentinelLike> };
     };
@@ -78,7 +78,12 @@ function WorkoutPage() {
     }
     if (remaining <= 0) {
       // transition
-      if (phase === "work") {
+      if (phase === "ready") {
+        setPhase("work");
+        setRemaining(WORK_SECONDS);
+        startBeep();
+        speak(`Go. ${EXERCISES[0].name}.`);
+      } else if (phase === "work") {
         const isLast = index === EXERCISES.length - 1;
         if (isLast) {
           finishBeep();
@@ -142,9 +147,15 @@ function WorkoutPage() {
   const current = EXERCISES[index];
   const next = EXERCISES[index + 1];
   const Icon = current.icon;
-  const total = phase === "work" ? WORK_SECONDS : REST_SECONDS;
+  const total =
+    phase === "work" ? WORK_SECONDS : phase === "rest" ? REST_SECONDS : READY_SECONDS;
   const progress = Math.max(0, Math.min(1, (total - remaining) / total));
-  const ringColor = phase === "work" ? "var(--primary)" : "var(--rest)";
+  const ringColor =
+    phase === "work"
+      ? "var(--primary)"
+      : phase === "rest"
+        ? "var(--rest)"
+        : "var(--primary)";
 
   return (
     <main className="min-h-screen flex flex-col px-6 pt-8 pb-8 max-w-md mx-auto">
@@ -173,7 +184,7 @@ function WorkoutPage() {
         className="text-center text-xs uppercase tracking-[0.3em] font-mono mb-4"
         style={{ color: ringColor }}
       >
-        {phase === "work" ? "Work" : "Rest"}
+        {phase === "work" ? "Work" : phase === "rest" ? "Rest" : "Get Ready"}
       </p>
 
       {/* Timer ring */}
@@ -216,10 +227,18 @@ function WorkoutPage() {
           <Icon className="w-10 h-10" strokeWidth={1.5} />
         </div>
         <h2 className="font-display font-bold text-3xl leading-tight">
-          {phase === "work" ? current.name : "Catch your breath"}
+          {phase === "work"
+            ? current.name
+            : phase === "ready"
+              ? `First up: ${current.name}`
+              : "Catch your breath"}
         </h2>
         <p className="text-sm text-muted-foreground mt-2 min-h-[2.5rem]">
-          {phase === "work" ? current.tip : `Up next: ${next?.name ?? "—"}`}
+          {phase === "work"
+            ? current.tip
+            : phase === "ready"
+              ? current.tip
+              : `Up next: ${next?.name ?? "—"}`}
         </p>
       </div>
 
