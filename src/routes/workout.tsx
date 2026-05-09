@@ -30,19 +30,47 @@ export const Route = createFileRoute("/workout")({
 
 type WakeLockSentinelLike = { release: () => Promise<void> };
 
+function phaseDuration(phase: Phase): number {
+  if (phase === "work") return WORK_SECONDS;
+  if (phase === "rest") return REST_SECONDS;
+  return READY_SECONDS;
+}
+
 function WorkoutPage() {
   const navigate = useNavigate();
   const { test } = Route.useSearch();
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("ready");
   const [remaining, setRemaining] = useState(READY_SECONDS);
+  const [progress, setProgress] = useState(0); // 0..1, smooth
   const [paused, setPaused] = useState(false);
   const [done, setDone] = useState(false);
   const [difficulty, setDifficulty] = useState<number | null>(null);
+
+  // Refs (don't trigger re-render)
   const startTimeRef = useRef<number>(Date.now());
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
+  const phaseStartRef = useRef<number>(performance.now());
+  const pauseOffsetRef = useRef<number>(0); // ms accumulated while paused not used; we shift phaseStart instead
+  const pauseAtRef = useRef<number | null>(null);
+  const lastRemainingRef = useRef<number>(READY_SECONDS);
+  const phaseRef = useRef<Phase>("ready");
+  const indexRef = useRef<number>(0);
+  const doneRef = useRef<boolean>(false);
+  const pausedRef = useRef<boolean>(false);
 
-  // Wake lock + audio unlock
+  // Keep refs in sync
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+  useEffect(() => {
+    indexRef.current = index;
+  }, [index]);
+  useEffect(() => {
+    doneRef.current = done;
+  }, [done]);
+
+  // Wake lock + audio unlock + initial cue
   useEffect(() => {
     unlockAudio();
     speak("Get ready. Jumping jacks in five.");
@@ -60,63 +88,87 @@ function WorkoutPage() {
     };
   }, []);
 
-  // Timer tick
+  // Pause / resume: shift phaseStart so elapsed stays continuous
   useEffect(() => {
-    if (paused || done) return;
-    const id = setInterval(() => {
-      setRemaining((r) => r - 1);
-    }, 1000);
-    return () => clearInterval(id);
-  }, [paused, done]);
-
-  // Handle remaining changes (transitions + audio cues)
-  useEffect(() => {
-    if (done) return;
-    if (remaining > 0 && remaining <= 3) {
-      tickBeep();
-      return;
+    pausedRef.current = paused;
+    if (paused) {
+      pauseAtRef.current = performance.now();
+    } else if (pauseAtRef.current != null) {
+      const pausedFor = performance.now() - pauseAtRef.current;
+      phaseStartRef.current += pausedFor;
+      pauseAtRef.current = null;
     }
-    if (remaining <= 0) {
-      // transition
-      if (phase === "ready") {
-        setPhase("work");
-        setRemaining(WORK_SECONDS);
-        startBeep();
-        speak(`Go. ${EXERCISES[0].name}.`);
-      } else if (phase === "work") {
-        const isLast = index === EXERCISES.length - 1;
-        if (isLast) {
-          finishBeep();
-          setDone(true);
-          return;
-        }
-        setPhase("rest");
-        setRemaining(REST_SECONDS);
-        restBeep();
-        const next = EXERCISES[index + 1];
-        speak(`Rest. Next: ${next.name}.`);
-      } else {
-        // rest -> next work
-        const nextIdx = index + 1;
-        setIndex(nextIdx);
-        setPhase("work");
-        setRemaining(WORK_SECONDS);
-        startBeep();
-        speak(`Go. ${EXERCISES[nextIdx].name}.`);
+  }, [paused]);
+
+  function advancePhase() {
+    const p = phaseRef.current;
+    const i = indexRef.current;
+    if (p === "ready") {
+      setPhase("work");
+      lastRemainingRef.current = WORK_SECONDS;
+      setRemaining(WORK_SECONDS);
+      setProgress(0);
+      phaseStartRef.current = performance.now();
+      startBeep();
+      speak(`Go. ${EXERCISES[0].name}.`);
+    } else if (p === "work") {
+      const isLast = i === EXERCISES.length - 1;
+      if (isLast) {
+        finishBeep();
+        doneRef.current = true;
+        setDone(true);
+        return;
       }
+      setPhase("rest");
+      lastRemainingRef.current = REST_SECONDS;
+      setRemaining(REST_SECONDS);
+      setProgress(0);
+      phaseStartRef.current = performance.now();
+      restBeep();
+      speak(`Rest. Next: ${EXERCISES[i + 1].name}.`);
+    } else {
+      // rest -> next work
+      const nextIdx = i + 1;
+      setIndex(nextIdx);
+      setPhase("work");
+      lastRemainingRef.current = WORK_SECONDS;
+      setRemaining(WORK_SECONDS);
+      setProgress(0);
+      phaseStartRef.current = performance.now();
+      startBeep();
+      speak(`Go. ${EXERCISES[nextIdx].name}.`);
     }
+  }
+
+  // rAF-driven progress + remaining
+  useEffect(() => {
+    let raf = 0;
+    const loop = () => {
+      if (!doneRef.current) {
+        if (!pausedRef.current) {
+          const totalMs = phaseDuration(phaseRef.current) * 1000;
+          const elapsed = performance.now() - phaseStartRef.current;
+          const clamped = Math.min(elapsed, totalMs);
+          const prog = clamped / totalMs;
+          setProgress(prog);
+          const newRemaining = Math.max(0, Math.ceil((totalMs - clamped) / 1000));
+          if (newRemaining !== lastRemainingRef.current) {
+            lastRemainingRef.current = newRemaining;
+            setRemaining(newRemaining);
+            if (newRemaining > 0 && newRemaining <= 3) tickBeep();
+          }
+          if (elapsed >= totalMs) {
+            advancePhase();
+          }
+        }
+        raf = requestAnimationFrame(loop);
+      }
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remaining]);
+  }, []);
 
-  function quit() {
-    if (confirm("Quit this workout? Progress won't be saved.")) {
-      navigate({ to: "/" });
-    }
-  }
-
-  function skip() {
-    setRemaining(0);
-  }
 
   function saveAndExit() {
     if (test) {
