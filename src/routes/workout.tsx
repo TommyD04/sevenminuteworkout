@@ -18,6 +18,9 @@ import {
 import { saveSession } from "@/lib/storage";
 
 export const Route = createFileRoute("/workout")({
+  validateSearch: (s: Record<string, unknown>) => ({
+    test: s.test === "1" || s.test === 1 || s.test === true,
+  }),
   head: () => ({
     meta: [{ title: "Workout — 7 Minutes" }],
   }),
