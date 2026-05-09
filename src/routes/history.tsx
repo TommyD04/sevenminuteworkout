@@ -89,6 +89,16 @@ function HistoryPage() {
         />
       </div>
 
+      {sessions.length > 0 && (
+        <button
+          onClick={exportCsv}
+          className="flex items-center justify-center gap-2 w-full rounded-2xl border border-border py-3 mb-6 text-sm font-medium text-muted-foreground active:bg-card transition-colors"
+        >
+          <Download className="w-4 h-4" />
+          Export CSV
+        </button>
+      )}
+
       {/* Sessions */}
       {sessions.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-center text-muted-foreground">
