@@ -35,6 +35,36 @@ function HistoryPage() {
     setSessions(loadSessions());
   }
 
+  function exportCsv() {
+    if (sessions.length === 0) return;
+    const escape = (v: string | number) => {
+      const s = String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ["date", "time", "duration_seconds", "difficulty", "note"];
+    const rows = sessions
+      .slice()
+      .sort((a, b) => a.completedAt - b.completedAt)
+      .map((s) => {
+        const d = new Date(s.completedAt);
+        const date = d.toISOString().slice(0, 10);
+        const time = d.toTimeString().slice(0, 5);
+        return [date, time, s.durationSeconds, s.difficulty, s.note ?? ""]
+          .map(escape)
+          .join(",");
+      });
+    const csv = [header.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `seven-minute-workout-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <main className="min-h-screen flex flex-col px-6 pt-8 pb-8 max-w-md mx-auto">
       <Link
