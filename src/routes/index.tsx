@@ -113,13 +113,23 @@ function Home() {
           <Play className="w-6 h-6 fill-current" />
           Start workout
         </Link>
-        <Link
-          to="/history"
-          className="flex items-center justify-center gap-2 w-full rounded-2xl border border-border py-4 font-medium text-muted-foreground transition-colors active:bg-card"
-        >
-          <History className="w-4 h-4" />
-          History
-        </Link>
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            to="/workout"
+            search={{ test: true }}
+            className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-4 font-medium text-muted-foreground transition-colors active:bg-card"
+          >
+            <Play className="w-4 h-4" />
+            Test run
+          </Link>
+          <Link
+            to="/history"
+            className="flex items-center justify-center gap-2 rounded-2xl border border-border py-4 font-medium text-muted-foreground transition-colors active:bg-card"
+          >
+            <History className="w-4 h-4" />
+            History
+          </Link>
+        </div>
       </div>
     </main>
   );
