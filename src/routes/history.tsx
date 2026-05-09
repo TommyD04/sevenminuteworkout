@@ -66,10 +66,10 @@ function HistoryPage() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col px-6 pt-8 pb-8 max-w-md mx-auto">
+    <main className="min-h-screen flex flex-col px-6 pt-20 pb-8 max-w-md mx-auto">
       <Link
         to="/"
-        className="flex items-center gap-1 text-muted-foreground -ml-2 mb-6 active:text-foreground"
+        className="flex items-center gap-1 text-muted-foreground -ml-2 mb-6 py-2 active:text-foreground"
       >
         <ChevronLeft className="w-5 h-5" />
         <span className="text-sm">Back</span>
