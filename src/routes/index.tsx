@@ -126,38 +126,38 @@ function Home() {
                 ? "text-primary font-bold"
                 : "text-muted-foreground active:bg-card"
           }`;
-          const inner = (
-            <>
-              <span className="flex items-center gap-3 text-left">
-                <span
-                  className={`inline-block w-1.5 h-1.5 rounded-full ${
-                    isSelected && !r.locked ? "bg-primary" : "bg-transparent"
-                  }`}
-                />
-                <span>{r.name}</span>
-              </span>
-              {r.locked ? (
-                <Lock className="w-4 h-4 opacity-60" />
-              ) : (
-                <ChevronRight className="w-4 h-4 opacity-60" />
-              )}
-            </>
-          );
           return (
-            <li key={r.id}>
+            <li key={r.id} className="relative">
+              <button
+                type="button"
+                onClick={() => selectRoutine(r.id, r.locked)}
+                disabled={r.locked}
+                aria-pressed={isSelected}
+                className={baseClasses}
+              >
+                <span className="flex items-center gap-3 text-left">
+                  <span
+                    className={`inline-block w-1.5 h-1.5 rounded-full ${
+                      isSelected && !r.locked ? "bg-primary" : "bg-transparent"
+                    }`}
+                  />
+                  <span>{r.name}</span>
+                </span>
+                {/* Spacer to reserve room for the chevron / lock */}
+                <span className="w-9 h-5" aria-hidden />
+              </button>
               {r.locked ? (
-                <button type="button" disabled className={baseClasses}>
-                  {inner}
-                </button>
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-muted-foreground/60 pointer-events-none">
+                  <Lock className="w-4 h-4 opacity-60" />
+                </span>
               ) : (
                 <Link
                   to="/routine/$id"
                   params={{ id: r.id }}
-                  onClick={() => selectRoutine(r.id, false)}
-                  aria-pressed={isSelected}
-                  className={baseClasses}
+                  aria-label={`Open ${r.name} details`}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 p-3 text-muted-foreground active:text-primary"
                 >
-                  {inner}
+                  <ChevronRight className="w-4 h-4 opacity-60" />
                 </Link>
               )}
             </li>
