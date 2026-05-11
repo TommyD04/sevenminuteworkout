@@ -81,7 +81,7 @@ function WorkoutPage() {
   // Wake lock + audio unlock + initial cue
   useEffect(() => {
     unlockAudio();
-    speak("Get ready. Jumping jacks in five.");
+    speak(`Get ready. ${EXERCISES[0].name} in five.`);
     const nav = navigator as Navigator & {
       wakeLock?: { request: (t: "screen") => Promise<WakeLockSentinelLike> };
     };
