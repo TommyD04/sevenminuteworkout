@@ -54,8 +54,8 @@ export type Routine = {
 
 export const ROUTINES: Routine[] = [
   { id: "classic", name: "The Classic 7", locked: false },
-  { id: "soon-1", name: "Forthcoming", locked: true },
-  { id: "soon-2", name: "Forthcoming", locked: true },
+  { id: "advanced", name: "The Advanced 7", locked: true },
+  { id: "core", name: "The Core 7", locked: true },
 ];
 
 export const DEFAULT_ROUTINE_ID = "classic";
