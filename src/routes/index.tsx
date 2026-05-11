@@ -1,13 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Play, History, Flame } from "lucide-react";
+import { Play, History, Flame, ChevronRight, Lock } from "lucide-react";
 import {
   loadSessions,
   todayCount,
   last7Days,
   currentStreak,
+  loadSelectedRoutine,
+  saveSelectedRoutine,
   type Session,
 } from "@/lib/storage";
+import { ROUTINES, DEFAULT_ROUTINE_ID } from "@/lib/workout";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -24,10 +27,18 @@ export const Route = createFileRoute("/")({
 
 function Home() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [selectedRoutine, setSelectedRoutine] = useState<string>(DEFAULT_ROUTINE_ID);
 
   useEffect(() => {
     setSessions(loadSessions());
+    setSelectedRoutine(loadSelectedRoutine(DEFAULT_ROUTINE_ID));
   }, []);
+
+  const selectRoutine = (id: string, locked: boolean) => {
+    if (locked) return;
+    setSelectedRoutine(id);
+    saveSelectedRoutine(id);
+  };
 
   const today = todayCount(sessions);
   const week = last7Days(sessions);
@@ -104,8 +115,46 @@ function Home() {
         </div>
       </section>
 
+      {/* Routine selector */}
+      <ul className="mt-auto mb-6 space-y-1">
+        {ROUTINES.map((r) => {
+          const isSelected = r.id === selectedRoutine;
+          return (
+            <li key={r.id}>
+              <button
+                type="button"
+                onClick={() => selectRoutine(r.id, r.locked)}
+                disabled={r.locked}
+                aria-pressed={isSelected}
+                className={`w-full flex items-center justify-between gap-3 py-3 -mx-2 px-2 rounded-lg transition-colors ${
+                  r.locked
+                    ? "text-muted-foreground/60 cursor-not-allowed"
+                    : isSelected
+                      ? "text-primary font-bold"
+                      : "text-muted-foreground active:bg-card"
+                }`}
+              >
+                <span className="flex items-center gap-3 text-left">
+                  <span
+                    className={`inline-block w-1.5 h-1.5 rounded-full ${
+                      isSelected && !r.locked ? "bg-primary" : "bg-transparent"
+                    }`}
+                  />
+                  <span>{r.name}</span>
+                </span>
+                {r.locked ? (
+                  <Lock className="w-4 h-4 opacity-60" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 opacity-60" />
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
       {/* CTAs */}
-      <div className="mt-auto space-y-3">
+      <div className="space-y-3">
         <Link
           to="/workout"
           className="flex items-center justify-center gap-3 w-full rounded-2xl bg-primary text-primary-foreground py-6 font-display font-bold text-2xl transition-transform active:scale-[0.98]"

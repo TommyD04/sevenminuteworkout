@@ -44,3 +44,18 @@ export const TOTAL_SECONDS =
 export type Phase = "ready" | "work" | "rest" | "done";
 
 export const FlameIcon = Flame;
+
+export type Routine = {
+  id: string;
+  name: string;
+  locked: boolean;
+};
+
+export const ROUTINES: Routine[] = [
+  { id: "classic", name: "The Classic 7", locked: false },
+  { id: "soon-1", name: "Forthcoming", locked: true },
+  { id: "soon-2", name: "Forthcoming", locked: true },
+];
+
+export const DEFAULT_ROUTINE_ID = "classic";
+

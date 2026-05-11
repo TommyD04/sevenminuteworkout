@@ -30,6 +30,25 @@ export function deleteSession(id: string) {
   localStorage.setItem(KEY, JSON.stringify(all));
 }
 
+const ROUTINE_KEY = "seven-min-selected-routine-v1";
+
+export function loadSelectedRoutine(fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  try {
+    return localStorage.getItem(ROUTINE_KEY) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveSelectedRoutine(id: string) {
+  try {
+    localStorage.setItem(ROUTINE_KEY, id);
+  } catch {
+    /* noop */
+  }
+}
+
 const dayKey = (ts: number) => {
   const d = new Date(ts);
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
