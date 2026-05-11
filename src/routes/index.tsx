@@ -27,10 +27,18 @@ export const Route = createFileRoute("/")({
 
 function Home() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [selectedRoutine, setSelectedRoutine] = useState<string>(DEFAULT_ROUTINE_ID);
 
   useEffect(() => {
     setSessions(loadSessions());
+    setSelectedRoutine(loadSelectedRoutine(DEFAULT_ROUTINE_ID));
   }, []);
+
+  const selectRoutine = (id: string, locked: boolean) => {
+    if (locked) return;
+    setSelectedRoutine(id);
+    saveSelectedRoutine(id);
+  };
 
   const today = todayCount(sessions);
   const week = last7Days(sessions);
