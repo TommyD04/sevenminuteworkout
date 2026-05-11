@@ -86,6 +86,7 @@ function RoutineDetail() {
 
       <Link
         to="/workout"
+        search={{ test: false, routine: routine.id }}
         className="mt-auto flex items-center justify-center gap-3 w-full rounded-2xl bg-primary text-primary-foreground py-5 font-display font-bold text-xl transition-transform active:scale-[0.98]"
       >
         Start workout

@@ -2,12 +2,14 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Pause, Play, SkipForward, X } from "lucide-react";
 import {
-  EXERCISES,
+  ROUTINES,
+  DEFAULT_ROUTINE_ID,
   WORK_SECONDS,
   REST_SECONDS,
   READY_SECONDS,
   type Phase,
 } from "@/lib/workout";
+import { loadSelectedRoutine } from "@/lib/storage";
 import {
   unlockAudio,
   tickBeep,
@@ -18,9 +20,11 @@ import {
 } from "@/lib/audio";
 import { saveSession } from "@/lib/storage";
 
+
 export const Route = createFileRoute("/workout")({
   validateSearch: (s: Record<string, unknown>) => ({
     test: s.test === "1" || s.test === 1 || s.test === true,
+    routine: typeof s.routine === "string" ? s.routine : undefined,
   }),
   head: () => ({
     meta: [{ title: "Workout — 7 Minutes" }],
@@ -38,7 +42,11 @@ function phaseDuration(phase: Phase): number {
 
 function WorkoutPage() {
   const navigate = useNavigate();
-  const { test } = Route.useSearch();
+  const { test, routine: routineParam } = Route.useSearch();
+  const [EXERCISES] = useState(() => {
+    const id = routineParam ?? (typeof window !== "undefined" ? loadSelectedRoutine(DEFAULT_ROUTINE_ID) : DEFAULT_ROUTINE_ID);
+    return (ROUTINES.find((r) => r.id === id && !r.locked) ?? ROUTINES[0]).exercises;
+  });
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("ready");
   const [remaining, setRemaining] = useState(READY_SECONDS);
@@ -73,7 +81,7 @@ function WorkoutPage() {
   // Wake lock + audio unlock + initial cue
   useEffect(() => {
     unlockAudio();
-    speak("Get ready. Jumping jacks in five.");
+    speak(`Get ready. ${EXERCISES[0].name} in five.`);
     const nav = navigator as Navigator & {
       wakeLock?: { request: (t: "screen") => Promise<WakeLockSentinelLike> };
     };
