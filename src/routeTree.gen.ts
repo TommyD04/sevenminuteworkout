@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WorkoutRouteImport } from './routes/workout'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RoutineIdRouteImport } from './routes/routine.$id'
 
 const WorkoutRoute = WorkoutRouteImport.update({
   id: '/workout',
@@ -28,35 +29,44 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RoutineIdRoute = RoutineIdRouteImport.update({
+  id: '/routine/$id',
+  path: '/routine/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/history': typeof HistoryRoute
   '/workout': typeof WorkoutRoute
+  '/routine/$id': typeof RoutineIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/history': typeof HistoryRoute
   '/workout': typeof WorkoutRoute
+  '/routine/$id': typeof RoutineIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/history': typeof HistoryRoute
   '/workout': typeof WorkoutRoute
+  '/routine/$id': typeof RoutineIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/history' | '/workout'
+  fullPaths: '/' | '/history' | '/workout' | '/routine/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/history' | '/workout'
-  id: '__root__' | '/' | '/history' | '/workout'
+  to: '/' | '/history' | '/workout' | '/routine/$id'
+  id: '__root__' | '/' | '/history' | '/workout' | '/routine/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HistoryRoute: typeof HistoryRoute
   WorkoutRoute: typeof WorkoutRoute
+  RoutineIdRoute: typeof RoutineIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -82,6 +92,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/routine/$id': {
+      id: '/routine/$id'
+      path: '/routine/$id'
+      fullPath: '/routine/$id'
+      preLoaderRoute: typeof RoutineIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -89,7 +106,18 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HistoryRoute: HistoryRoute,
   WorkoutRoute: WorkoutRoute,
+  RoutineIdRoute: RoutineIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
