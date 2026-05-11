@@ -2,12 +2,14 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Pause, Play, SkipForward, X } from "lucide-react";
 import {
-  EXERCISES,
+  ROUTINES,
+  DEFAULT_ROUTINE_ID,
   WORK_SECONDS,
   REST_SECONDS,
   READY_SECONDS,
   type Phase,
 } from "@/lib/workout";
+import { loadSelectedRoutine } from "@/lib/storage";
 import {
   unlockAudio,
   tickBeep,
@@ -17,6 +19,7 @@ import {
   speak,
 } from "@/lib/audio";
 import { saveSession } from "@/lib/storage";
+
 
 export const Route = createFileRoute("/workout")({
   validateSearch: (s: Record<string, unknown>) => ({
