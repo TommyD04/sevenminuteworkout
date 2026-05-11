@@ -1,13 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Play, History, Flame } from "lucide-react";
+import { Play, History, Flame, ChevronRight, Lock } from "lucide-react";
 import {
   loadSessions,
   todayCount,
   last7Days,
   currentStreak,
+  loadSelectedRoutine,
+  saveSelectedRoutine,
   type Session,
 } from "@/lib/storage";
+import { ROUTINES, DEFAULT_ROUTINE_ID } from "@/lib/workout";
 
 export const Route = createFileRoute("/")({
   head: () => ({
