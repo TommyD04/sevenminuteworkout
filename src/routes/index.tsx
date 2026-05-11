@@ -119,35 +119,47 @@ function Home() {
       <ul className="mt-auto mb-6 space-y-1">
         {ROUTINES.map((r) => {
           const isSelected = r.id === selectedRoutine;
+          const baseClasses = `w-full flex items-center justify-between gap-3 py-3 -mx-2 px-2 rounded-lg transition-colors ${
+            r.locked
+              ? "text-muted-foreground/60 cursor-not-allowed"
+              : isSelected
+                ? "text-primary font-bold"
+                : "text-muted-foreground active:bg-card"
+          }`;
+          const inner = (
+            <>
+              <span className="flex items-center gap-3 text-left">
+                <span
+                  className={`inline-block w-1.5 h-1.5 rounded-full ${
+                    isSelected && !r.locked ? "bg-primary" : "bg-transparent"
+                  }`}
+                />
+                <span>{r.name}</span>
+              </span>
+              {r.locked ? (
+                <Lock className="w-4 h-4 opacity-60" />
+              ) : (
+                <ChevronRight className="w-4 h-4 opacity-60" />
+              )}
+            </>
+          );
           return (
             <li key={r.id}>
-              <button
-                type="button"
-                onClick={() => selectRoutine(r.id, r.locked)}
-                disabled={r.locked}
-                aria-pressed={isSelected}
-                className={`w-full flex items-center justify-between gap-3 py-3 -mx-2 px-2 rounded-lg transition-colors ${
-                  r.locked
-                    ? "text-muted-foreground/60 cursor-not-allowed"
-                    : isSelected
-                      ? "text-primary font-bold"
-                      : "text-muted-foreground active:bg-card"
-                }`}
-              >
-                <span className="flex items-center gap-3 text-left">
-                  <span
-                    className={`inline-block w-1.5 h-1.5 rounded-full ${
-                      isSelected && !r.locked ? "bg-primary" : "bg-transparent"
-                    }`}
-                  />
-                  <span>{r.name}</span>
-                </span>
-                {r.locked ? (
-                  <Lock className="w-4 h-4 opacity-60" />
-                ) : (
-                  <ChevronRight className="w-4 h-4 opacity-60" />
-                )}
-              </button>
+              {r.locked ? (
+                <button type="button" disabled className={baseClasses}>
+                  {inner}
+                </button>
+              ) : (
+                <Link
+                  to="/routine/$id"
+                  params={{ id: r.id }}
+                  onClick={() => selectRoutine(r.id, false)}
+                  aria-pressed={isSelected}
+                  className={baseClasses}
+                >
+                  {inner}
+                </Link>
+              )}
             </li>
           );
         })}
