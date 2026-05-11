@@ -1,7 +1,6 @@
 import {
   Activity,
   Anchor,
-  Armchair,
   ArrowUpFromLine,
   ChevronsUp,
   Flame,
@@ -11,6 +10,7 @@ import {
   Repeat,
   StretchHorizontal,
   Triangle,
+  TrendingUp,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -26,7 +26,7 @@ export const EXERCISES: Exercise[] = [
   { name: "Wall Sit", tip: "Thighs parallel to floor, back flat against wall.", icon: ChevronsUp },
   { name: "Push-ups", tip: "Body in a straight line, elbows ~45°.", icon: ArrowUpFromLine },
   { name: "Crunches", tip: "Lift shoulders, not your neck. Slow and controlled.", icon: MoveUp },
-  { name: "Step-ups on Chair", tip: "Drive through the heel. Alternate legs.", icon: Armchair },
+  { name: "Step-ups on Chair", tip: "Drive through the heel. Alternate legs.", icon: TrendingUp },
   { name: "Squats", tip: "Knees track over toes, chest up.", icon: MoveDown },
   { name: "Tricep Dips", tip: "Elbows back, not flared. Lower until 90°.", icon: Triangle },
   { name: "Plank", tip: "Straight line head to heels. Brace your core.", icon: Anchor },
