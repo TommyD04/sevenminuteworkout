@@ -37,7 +37,7 @@ function Home() {
     <main className="min-h-screen flex flex-col px-6 pt-12 pb-8 max-w-md mx-auto">
       <header className="mb-10">
         <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground font-mono">
-          The Scientific
+          The Scientific-ish
         </p>
         <h1 className="text-5xl font-display font-bold leading-[0.95] mt-2">
           7-Minute
