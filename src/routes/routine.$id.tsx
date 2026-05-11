@@ -1,6 +1,6 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
-import { ROUTINES, WORK_SECONDS, REST_SECONDS } from "@/lib/workout";
+import { ROUTINES, WORK_SECONDS, REST_SECONDS, type Exercise } from "@/lib/workout";
 
 export const Route = createFileRoute("/routine/$id")({
   head: ({ params }) => {
@@ -64,7 +64,7 @@ function RoutineDetail() {
       </header>
 
       <ol className="space-y-1 mb-8">
-        {routine.exercises.map((ex, i) => {
+        {routine.exercises.map((ex: Exercise, i: number) => {
           const Icon = ex.icon;
           return (
             <li
