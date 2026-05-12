@@ -45,7 +45,7 @@ function Home() {
   const streak = currentStreak(sessions);
 
   return (
-    <main className="min-h-screen flex flex-col px-6 pt-12 pb-8 max-w-md mx-auto">
+    <main className="min-h-screen flex flex-col px-6 pt-20 pb-8 max-w-md mx-auto">
       <header className="mb-10">
         <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground font-mono">
           The Scientific-ish
@@ -86,9 +86,8 @@ function Home() {
         <div className="flex justify-between gap-1.5">
           {week.map((d, i) => {
             const intensity = Math.min(d.count, 3);
-            const label = d.date.toLocaleDateString(undefined, {
-              weekday: "short",
-            })[0];
+            const WD = ["S", "M", "T", "W", "T", "F", "S"];
+            const label = WD[d.date.getDay()];
             return (
               <div key={i} className="flex flex-col items-center gap-2 flex-1">
                 <div
@@ -116,10 +115,10 @@ function Home() {
       </section>
 
       {/* Routine selector */}
-      <ul className="mt-auto mb-6 space-y-1">
+      <ul className="mt-auto mb-6">
         {ROUTINES.map((r) => {
           const isSelected = r.id === selectedRoutine;
-          const baseClasses = `w-full flex items-center justify-between gap-3 py-3 -mx-2 px-2 rounded-lg transition-colors ${
+          const baseClasses = `w-full flex items-center justify-between gap-3 py-1.5 -mx-2 px-2 rounded-lg transition-colors ${
             r.locked
               ? "text-muted-foreground/60 cursor-not-allowed"
               : isSelected
