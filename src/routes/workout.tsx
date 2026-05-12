@@ -119,7 +119,7 @@ function WorkoutPage() {
       setProgress(0);
       phaseStartRef.current = performance.now();
       startBeep();
-      speak(`Go. ${EXERCISES[0].name}.`);
+      speak(`${EXERCISES[0].name}.`);
     } else if (p === "work") {
       const isLast = i === EXERCISES.length - 1;
       if (isLast) {
@@ -145,7 +145,7 @@ function WorkoutPage() {
       setProgress(0);
       phaseStartRef.current = performance.now();
       startBeep();
-      speak(`Go. ${EXERCISES[nextIdx].name}.`);
+      speak(`${EXERCISES[nextIdx].name}.`);
     }
   }
 
