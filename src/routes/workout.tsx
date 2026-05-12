@@ -164,7 +164,7 @@ function WorkoutPage() {
           if (newRemaining !== lastRemainingRef.current) {
             lastRemainingRef.current = newRemaining;
             setRemaining(newRemaining);
-            if (newRemaining > 0 && newRemaining <= 3) tickBeep();
+            if (newRemaining > 0 && newRemaining <= 5) tickBeep();
           }
           if (elapsed >= totalMs) {
             advancePhase();
