@@ -11,6 +11,7 @@ import {
   type Session,
 } from "@/lib/storage";
 import { ROUTINES, DEFAULT_ROUTINE_ID } from "@/lib/workout";
+import { unlockAudio } from "@/lib/audio";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -169,6 +170,7 @@ function Home() {
         <Link
           to="/workout"
           search={{ test: false, routine: selectedRoutine }}
+          onClick={() => unlockAudio()}
           className="flex items-center justify-center gap-3 w-full rounded-2xl bg-primary text-primary-foreground py-6 font-display font-bold text-2xl transition-transform active:scale-[0.98]"
         >
           <Play className="w-6 h-6 fill-current" />
@@ -178,6 +180,7 @@ function Home() {
           <Link
             to="/workout"
             search={{ test: true, routine: selectedRoutine }}
+            onClick={() => unlockAudio()}
             className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-4 font-medium text-muted-foreground transition-colors active:bg-card"
           >
             <Play className="w-4 h-4" />
