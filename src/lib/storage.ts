@@ -4,6 +4,8 @@ export type Session = {
   durationSeconds: number;
   difficulty: number; // 1-5
   note?: string;
+  routineId?: string; // back-compat: missing = "classic"
+  routineName?: string;
 };
 
 const KEY = "seven-min-sessions-v1";

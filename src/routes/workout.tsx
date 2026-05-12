@@ -43,10 +43,11 @@ function phaseDuration(phase: Phase): number {
 function WorkoutPage() {
   const navigate = useNavigate();
   const { test, routine: routineParam } = Route.useSearch();
-  const [EXERCISES] = useState(() => {
+  const [activeRoutine] = useState(() => {
     const id = routineParam ?? (typeof window !== "undefined" ? loadSelectedRoutine(DEFAULT_ROUTINE_ID) : DEFAULT_ROUTINE_ID);
-    return (ROUTINES.find((r) => r.id === id && !r.locked) ?? ROUTINES[0]).exercises;
+    return ROUTINES.find((r) => r.id === id && !r.locked) ?? ROUTINES[0];
   });
+  const EXERCISES = activeRoutine.exercises;
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("ready");
   const [remaining, setRemaining] = useState(READY_SECONDS);
@@ -200,6 +201,8 @@ function WorkoutPage() {
       completedAt: Date.now(),
       durationSeconds: Math.round((Date.now() - startTimeRef.current) / 1000),
       difficulty,
+      routineId: activeRoutine.id,
+      routineName: activeRoutine.name,
     });
     navigate({ to: "/" });
   }

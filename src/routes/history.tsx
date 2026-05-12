@@ -41,7 +41,7 @@ function HistoryPage() {
       const s = String(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const header = ["date", "time", "duration_seconds", "difficulty", "note"];
+    const header = ["date", "time", "routine", "duration_seconds", "difficulty", "note"];
     const rows = sessions
       .slice()
       .sort((a, b) => a.completedAt - b.completedAt)
@@ -49,7 +49,8 @@ function HistoryPage() {
         const d = new Date(s.completedAt);
         const date = d.toISOString().slice(0, 10);
         const time = d.toTimeString().slice(0, 5);
-        return [date, time, s.durationSeconds, s.difficulty, s.note ?? ""]
+        const routine = s.routineName ?? "The Classic 7";
+        return [date, time, routine, s.durationSeconds, s.difficulty, s.note ?? ""]
           .map(escape)
           .join(",");
       });
@@ -123,6 +124,9 @@ function HistoryPage() {
                     month: "short",
                     day: "numeric",
                   })}
+                </div>
+                <div className="text-xs text-primary mt-0.5 font-medium">
+                  {s.routineName ?? "The Classic 7"}
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5 font-mono">
                   {new Date(s.completedAt).toLocaleTimeString(undefined, {
