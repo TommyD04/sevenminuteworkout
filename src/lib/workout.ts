@@ -84,9 +84,9 @@ const CORE_EXERCISES: Exercise[] = [
 ];
 
 export const ROUTINES: Routine[] = [
+  { id: "core", name: "The Core 7", locked: false, exercises: CORE_EXERCISES },
   { id: "classic", name: "The Classic 7", locked: false, exercises: EXERCISES },
   { id: "advanced", name: "The Advanced 7", locked: false, exercises: ADVANCED_EXERCISES },
-  { id: "core", name: "The Core 7", locked: false, exercises: CORE_EXERCISES },
 ];
 
 export const DEFAULT_ROUTINE_ID = "classic";
