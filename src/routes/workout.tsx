@@ -229,7 +229,7 @@ function WorkoutPage() {
         : "var(--primary)";
 
   return (
-    <main className="min-h-screen flex flex-col px-6 pt-8 pb-8 max-w-md mx-auto">
+    <main className="min-h-screen flex flex-col px-6 pt-16 pb-8 max-w-md mx-auto">
       {/* Top bar */}
       <div className="flex items-center justify-between mb-2">
         <button onClick={quit} className="p-2 -ml-2 text-muted-foreground active:text-foreground">
