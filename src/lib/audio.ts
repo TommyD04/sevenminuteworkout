@@ -17,7 +17,18 @@ function getCtx(): AudioContext | null {
 
 export function unlockAudio() {
   const c = getCtx();
-  if (c && c.state === "suspended") c.resume();
+  if (!c) return;
+  if (c.state === "suspended") c.resume();
+  // iOS requires a sound to actually play during the gesture to fully unlock.
+  try {
+    const buffer = c.createBuffer(1, 1, 22050);
+    const src = c.createBufferSource();
+    src.buffer = buffer;
+    src.connect(c.destination);
+    src.start(0);
+  } catch {
+    /* noop */
+  }
 }
 
 function beep(freq: number, durationMs: number, volume = 0.25) {
