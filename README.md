@@ -8,11 +8,13 @@ A small, opinionated take on the [Scientific 7-Minute Workout](https://www.nytim
 
 ## How this came to be
 
-I had some time to kill at a coffee shop while my wife was in a class across the street. Lately, my son had been encouraging me to start working out again — I'd paused after a serious injury last fall, and even though I'm mostly recovered, restarting the habit has been hard.
+Last Sunday (05/10), I had some time to kill at a coffee shop while my wife was in a class across the street. My son had recently been encouraging me to start working out again — I'd paused and never restarted after an injury last fall — and on a whim I checked the app store for an update to the "7-minute workout" app I had several phones ago. I hated everything I saw.
 
-On a whim, I vibe-coded this PWA from my iPhone using [Lovable](https://lovable.dev). I had strong opinions about the design and the experience. What would work for me, what wouldn't. What I need, and — looking briefly at the many similar apps in the app store — what I very much did not.
+On a whim, sitting in that coffee shop, I vibe-coded a quick PWA from my iPhone using [Lovable](https://lovable.dev). I had strong opinions about the design and the experience. What would work for me, what wouldn't. What I needed and — reflecting on the app store — what very much wouldn't.
 
-I picked it up again that night after Sam went to bed, and transitioned to a desktop so I could be more pointed on a few facts. As PM, I was pretty happy with the result. As a builder — even a baby builder — I wanted to do better.<br>I've started using this quick project as a chance to **go deeper** — learn the stack underneath, sharpen the rough edges, write down what I learn along the way. Everything — the audit, the bugs, the design decisions, the rough edges — lives in [`documentation/`](./documentation). Read along. Disagree with me. Open issues.
+I picked it up again that night after Sam went to bed, and transitioned to a desktop so I could be more pointed on a few facts. As PM, I was pretty happy with the result. As a builder — even a baby builder — I wanted to do better.
+
+I've started using this quick project as a chance to **go deeper** — learn the stack underneath, sharpen the rough edges, write down what I learn along the way. Everything — the audit, the bugs, the design decisions, the rough edges — lives in [`documentation/`](./documentation). Read along. Disagree with me. Open issues.
 
 If you're here just to do a 7-minute workout: tap a routine and go.
 
