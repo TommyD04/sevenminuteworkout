@@ -6,7 +6,7 @@ A small, opinionated take on the [Scientific 7-Minute Workout](https://www.nytim
 
 ---
 
-## How this came to be
+## Learning in public
 
 Last Sunday (05/10), I had some time to kill at a coffee shop while my wife was in a class across the street. My son had recently been encouraging me to start working out again — I'd paused and never restarted after an injury last fall — and on a whim I checked the app store for an update to the "7-minute workout" app I had several phones ago. I hated everything I saw.
 
