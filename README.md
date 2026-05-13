@@ -91,6 +91,20 @@ I'll add to this as I learn. If you have strong opinions about Bun in 2026, I wa
 
 Reverse-chronological. Each entry links to longer-form notes where they exist.
 
+### 2026-05-13 — "Missing" vs. "intentionally absent"
+
+Auditing the repo for secrets before flipping it public turned up a useful surprise: [`.lovable/plan.md`](./.lovable/plan.md) (the original prompt-to-plan output Lovable generated for this project) explicitly states that **no service worker was intentional** — Lovable guidance, to avoid cache/preview weirdness during development.
+
+Yesterday's [audit](./documentation/2026-05-12%20Initial%20Product%20Audit.md) called the missing SW a P0 fix. It's not — it's a deliberate trade. The reframed question is:
+
+- Do we want **offline-in-the-gym** badly enough to take on the cache-management complexity that a service worker brings?
+- If yes: add SW + 192×192 icon + maskable icon. Accept the update dance.
+- If no: keep what we have. Chrome won't show "Install" (only "Add to Home screen"), but the UX is otherwise fine.
+
+**Pattern I'm internalizing:** before fixing a "missing" thing, find out whether it was missed or *removed on purpose*. The same artifact looks like a bug from one angle and a design choice from another. Read the prior author's notes before assuming oversight.
+
+Full reframe: [Audit addendum — PWA finding reframed](./documentation/2026-05-12%20Initial%20Product%20Audit.md#update--2026-05-13-pwa-finding-reframed)
+
 ### 2026-05-12 — SSR serialization boundaries are real
 
 Fixed a `/routine/<id>` crash that only fired on cold load (refresh, deep link, share). Root cause was returning a Lucide icon component from a route loader; the SSR serializer (`seroval`) refused to encode the icon's `forwardRef` symbol, the server crashed mid-stream, and the client tried to hydrate against state that was never written.
@@ -136,7 +150,7 @@ The list below comes straight from the [initial audit](./documentation/2026-05-1
 ### Now (P0 — bugs and basics)
 
 - [x] **Fix `/routine/<id>` deep-link crash.** SSR was serializing icon components in the loader return. ([details](./documentation/2026-05-12%20Lessons%20from%20the%20Routine%20Deep%20Link%20Crash.md))
-- [ ] **Make the PWA actually installable.** Add a 192×192 icon, a separate maskable icon, and register a service worker. Today Chrome rejects the install prompt.
+- [ ] **Decide what we want from PWA** *(next priority)*. Lovable's scaffold intentionally skipped the service worker — see [`.lovable/plan.md`](./.lovable/plan.md) line 57. That's not an oversight, it's a trade for simplicity. The cost: no offline support, no Chrome install prompt, no precaching. Worth **shaping properly** before changing anything — see the [dated addendum to the audit](./documentation/2026-05-12%20Initial%20Product%20Audit.md#update--2026-05-13-pwa-finding-reframed).
 - [ ] **Fix OG metadata.** `og:title` still says "Short Seven" and the OG image is the default Lovable preview. Shared links look generic.
 - [ ] **Remove `user-scalable=no` from the viewport.** Accessibility regression (WCAG 1.4.4 — users must be able to zoom).
 - [ ] **Replace the `window.confirm()` quit dialog** with an in-app modal styled to match the rest of the UI.

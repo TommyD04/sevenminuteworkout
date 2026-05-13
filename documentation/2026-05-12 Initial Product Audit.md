@@ -77,3 +77,34 @@ That's a small list, but if you ship it, this stops feeling like "an app built w
 | Viewport blocks zoom | `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">` |
 | Storage shape (good) | `localStorage["seven-min-sessions-v1"]` = JSON array of `{id, completedAt, durationSeconds, difficulty, routineId, routineName}` |
 | Test run still uses 30s intervals | Observed in `/workout?test=true&routine=core` — counter started at 30, banner read "TEST" but timings unchanged |
+
+---
+
+## Update — 2026-05-13: PWA finding reframed
+
+While auditing the repo for secrets before flipping it public, I re-read [`.lovable/plan.md`](../.lovable/plan.md) — the original prompt-to-plan output Lovable generated for this project. Line 57:
+
+> Manifest-only installability: `manifest.json` + apple-touch-icon + `apple-mobile-web-app-capable` meta. **No service worker** (per Lovable PWA guidance — avoids preview/cache issues; you still get the home-screen icon and fullscreen launch)
+
+**The missing service worker isn't an oversight — it's a deliberate Lovable design choice.** That doesn't invalidate the audit finding, but it reframes the question:
+
+| Original audit framing | Better framing |
+|---|---|
+| "Register a service worker to fix the broken PWA install" | "Decide whether we want offline support — and if so, accept the SW complexity that comes with it" |
+
+**What the no-SW choice gives us today:**
+- ✅ Simpler mental model — no cache invalidation hell
+- ✅ Changes ship immediately — no SW update dance during dev
+- ✅ "Add to Home Screen" + fullscreen launch works on both iOS and Android
+
+**What it costs us:**
+- ❌ No offline support — a workout app in the gym (sketchy wifi) is the actual canonical offline use case
+- ❌ Chrome's "Install app" prompt won't fire (Chrome requires SW + maskable icon + scope rules to qualify)
+- ❌ No precaching → slower repeat visits
+- ❌ Locks out future capabilities like background sync and push notifications
+
+**The decision worth making:** is the offline-in-the-gym use case strong enough to take on the SW complexity? Or is "open the app on wifi, then work out without losing state" sufficient? This is worth **shaping properly** before just adding a service worker.
+
+**Lesson to internalize:** *before fixing a "missing" thing, find out whether it was missed or removed on purpose.* The same artifact looks like a bug from one angle and a design choice from another. Read the prior author's notes before assuming oversight.
+
+The roadmap has been updated to reflect this as an investigation, not a fix.
