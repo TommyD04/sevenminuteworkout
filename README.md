@@ -16,9 +16,11 @@ I picked it up again that night after Sam went to bed, and transitioned to a des
 
 I've started using this quick project as a chance to **go deeper** — learn the stack underneath, sharpen the rough edges, write down what I learn along the way. Everything — the audit, the bugs, the design decisions, the rough edges — lives in [`documentation/`](./documentation). Read along. Disagree with me. Open issues.
 
+As of writing, I still haven't resumed working out.
+
 If you're here just to do a 7-minute workout: tap a routine and go.
 
-As of writing, I still haven't resumed working out.
+**Want it on your home screen as an app?** Use **Share → Add to Home Screen** on iPhone, or your browser menu → **Add to Home screen** on Android. It'll launch full-screen like a native app.
 
 ---
 
