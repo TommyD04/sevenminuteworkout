@@ -6,16 +6,17 @@ A small, opinionated take on the [Scientific 7-Minute Workout](https://www.nytim
 
 ---
 
-## What this is, honestly
+## How this came to be
 
-I built this in a single weekend with [Lovable](https://lovable.dev). It's a real product I plan to use, but I'm also using it as a sandbox to **learn modern web development in public**. That means:
+A recent Sunday afternoon, I had an hour to kill at a coffee shop while my wife was in a class across the street. My son had been pushing me to start working out again — I'd paused after a serious injury last fall, and even though I'm mostly recovered, restarting the habit has been hard.
 
-- The first version was largely AI-generated — and it shows. Some good patterns, some antipatterns, some bugs.
-- I'm working through it iteratively, and writing down what I learn as I go.
-- Everything — the audit, the bugs, the design decisions, the rough edges — lives in [`documentation/`](./documentation). Read along. Disagree with me. Open issues.
-- I'd rather ship a small thing that teaches me ten things than read ten books about shipping.
+On a whim, I vibe-coded this PWA from my iPhone using [Lovable](https://lovable.dev). I had strong opinions about the design and performance, and was learning my way through everything else.
 
-If you're here because you're learning too, hopefully the [`documentation/`](./documentation) folder is useful. If you're here because you just want to do a 7-minute workout — tap a routine and go.
+I'm happy with where the user experience landed. I've decided to use the project as a chance to **go deeper** — learn the stack underneath, sharpen the rough edges, write down what I learn along the way. Everything — the audit, the bugs, the design decisions, the rough edges — lives in [`documentation/`](./documentation). Read along. Disagree with me. Open issues.
+
+If you're here just to do a 7-minute workout: tap a routine and go.
+
+As of writing, I still haven't resumed working out.
 
 ---
 
