@@ -31,15 +31,15 @@ export const Route = createFileRoute("/routine/$id")({
       </Link>
     </main>
   ),
-  loader: ({ params }) => {
+  beforeLoad: ({ params }) => {
     const r = ROUTINES.find((x) => x.id === params.id);
     if (!r || r.locked) throw notFound();
-    return r;
   },
 });
 
 function RoutineDetail() {
-  const routine = Route.useLoaderData();
+  const { id } = Route.useParams();
+  const routine = ROUTINES.find((r) => r.id === id)!;
 
   return (
     <main className="min-h-screen flex flex-col px-6 pt-20 pb-8 max-w-md mx-auto">
