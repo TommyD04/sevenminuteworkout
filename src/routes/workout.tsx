@@ -19,6 +19,17 @@ import {
   speak,
 } from "@/lib/audio";
 import { saveSession } from "@/lib/storage";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { buttonVariants } from "@/components/ui/button";
 
 
 export const Route = createFileRoute("/workout")({
@@ -55,6 +66,8 @@ function WorkoutPage() {
   const [paused, setPaused] = useState(false);
   const [done, setDone] = useState(false);
   const [difficulty, setDifficulty] = useState<number | null>(null);
+  const [quitOpen, setQuitOpen] = useState(false);
+  const wasPausedBeforeQuitRef = useRef(false);
 
   // Refs (don't trigger re-render)
   const startTimeRef = useRef<number>(Date.now());
@@ -179,10 +192,22 @@ function WorkoutPage() {
   }, []);
 
 
-  function quit() {
-    if (confirm("Quit this workout? Progress won't be saved.")) {
-      navigate({ to: "/" });
+  function openQuitDialog() {
+    wasPausedBeforeQuitRef.current = paused;
+    if (!paused) setPaused(true);
+    setQuitOpen(true);
+  }
+
+  function handleQuitOpenChange(open: boolean) {
+    setQuitOpen(open);
+    if (!open && !wasPausedBeforeQuitRef.current) {
+      setPaused(false);
     }
+  }
+
+  function confirmQuit() {
+    setQuitOpen(false);
+    navigate({ to: "/" });
   }
 
   function skip() {
@@ -232,7 +257,11 @@ function WorkoutPage() {
     <main className="min-h-screen flex flex-col px-6 pt-16 pb-8 max-w-md mx-auto">
       {/* Top bar */}
       <div className="flex items-center justify-between mb-2">
-        <button onClick={quit} className="p-2 -ml-2 text-muted-foreground active:text-foreground">
+        <button
+          onClick={openQuitDialog}
+          aria-label="Quit workout"
+          className="p-2 -ml-2 text-muted-foreground active:text-foreground"
+        >
           <X className="w-6 h-6" />
         </button>
         <div className="font-mono text-xs uppercase tracking-wider text-muted-foreground tabular flex items-center gap-2">
@@ -323,6 +352,24 @@ function WorkoutPage() {
           {paused ? <Play className="w-8 h-8 fill-current" /> : <Pause className="w-8 h-8 fill-current" />}
         </button>
       </div>
+
+      <AlertDialog open={quitOpen} onOpenChange={handleQuitOpenChange}>
+        <AlertDialogContent className="max-w-sm rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Quit this workout?</AlertDialogTitle>
+            <AlertDialogDescription>Your progress won't be saved.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep going</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmQuit}
+              className={buttonVariants({ variant: "destructive" })}
+            >
+              Quit workout
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }

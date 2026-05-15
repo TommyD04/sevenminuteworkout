@@ -7,6 +7,17 @@ import {
   currentStreak,
   type Session,
 } from "@/lib/storage";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { buttonVariants } from "@/components/ui/button";
 
 export const Route = createFileRoute("/history")({
   head: () => ({
@@ -17,6 +28,7 @@ export const Route = createFileRoute("/history")({
 
 function HistoryPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     setSessions(loadSessions());
@@ -29,10 +41,15 @@ function HistoryPage() {
       ? 0
       : sessions.reduce((sum, s) => sum + s.difficulty, 0) / total;
 
-  function remove(id: string) {
-    if (!confirm("Delete this session?")) return;
-    deleteSession(id);
+  const pendingSession = pendingDeleteId
+    ? sessions.find((s) => s.id === pendingDeleteId)
+    : null;
+
+  function confirmDelete() {
+    if (!pendingDeleteId) return;
+    deleteSession(pendingDeleteId);
     setSessions(loadSessions());
+    setPendingDeleteId(null);
   }
 
   function exportCsv() {
@@ -144,9 +161,9 @@ function HistoryPage() {
                   </span>
                 </div>
                 <button
-                  onClick={() => remove(s.id)}
+                  onClick={() => setPendingDeleteId(s.id)}
                   className="p-2 text-muted-foreground active:text-destructive"
-                  aria-label="Delete"
+                  aria-label="Delete session"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -155,6 +172,39 @@ function HistoryPage() {
           ))}
         </ul>
       )}
+
+      <AlertDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteId(null);
+        }}
+      >
+        <AlertDialogContent className="max-w-sm rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this session?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingSession
+                ? `Your ${pendingSession.routineName ?? "The Classic 7"} session from ${new Date(
+                    pendingSession.completedAt,
+                  ).toLocaleDateString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                  })} will be removed. This can't be undone.`
+                : "This can't be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className={buttonVariants({ variant: "destructive" })}
+            >
+              Delete session
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }
