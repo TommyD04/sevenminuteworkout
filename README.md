@@ -89,6 +89,19 @@ I'll add to this as I learn. If you have strong opinions about Bun in 2026, I wa
 
 Reverse-chronological. Each entry links to longer-form notes where they exist.
 
+### 2026-05-15 — Pinch-zoom is an accessibility right
+
+A one-line viewport meta change — delete `user-scalable=no` from `__root.tsx` — that sits at the intersection of accessibility, inherited scaffolds, and asymmetric platform behavior. iOS Safari has silently ignored this tag since 2016 on accessibility grounds; Chrome on Android still honors it. So the bug had real blast radius (half the global mobile market) but was invisible to iPhone-first testing. It was also never a decision anyone on this project made — Lovable's scaffold put it there and the project inherited it without auditing.
+
+**Patterns I'm internalizing:**
+
+- **Inherit-and-audit.** When you adopt a scaffold, schedule a pass through every default and ask "why?" Cousin to *"before fixing a missing thing, check whether it was missed or removed on purpose"* — the inverse: *before keeping a present thing, check whether it was added on purpose or just inherited.*
+- **Asymmetric platform behavior hides bugs.** The platform you don't test on is where the regression lives. iPhone-first dev silently shipped this Android-only failure.
+- **Accessibility-as-steady-state, not edge case.** Most a11y antipatterns don't hurt a small minority of users — they hurt a large majority of users some of the time. For a workout app used phone-on-the-floor with sweat in the eyes and reading glasses off, pinch-zoom is exactly the affordance the moment needs.
+- **"Native feel" is a category of antipattern**, not a justification. The browser features people strip to "feel more native" are usually the ones that make the web better than native — universal accessibility, deep-linkable URLs, no install gate.
+
+Full notes: [Lessons from Removing `user-scalable=no`](./documentation/2026-05-15%20Lessons%20from%20Removing%20user-scalable%3Dno.md)
+
 ### 2026-05-13 — "Missing" vs. "intentionally absent"
 
 Auditing the repo for secrets before flipping it public turned up a useful surprise: [`.lovable/plan.md`](./.lovable/plan.md) (the original prompt-to-plan output Lovable generated for this project) explicitly states that **no service worker was intentional** — Lovable guidance, to avoid cache/preview weirdness during development.
@@ -149,9 +162,9 @@ The list below comes straight from the [initial audit](./documentation/2026-05-1
 
 - [x] **Fix `/routine/<id>` deep-link crash.** SSR was serializing icon components in the loader return. ([details](./documentation/2026-05-12%20Lessons%20from%20the%20Routine%20Deep%20Link%20Crash.md))
 - [ ] **Decide what we want from PWA** *(next priority)*. Lovable's scaffold intentionally skipped the service worker — see [`.lovable/plan.md`](./.lovable/plan.md) line 57. That's not an oversight, it's a trade for simplicity. The cost: no offline support, no Chrome install prompt, no precaching. Worth **shaping properly** before changing anything — see the [dated addendum to the audit](./documentation/2026-05-12%20Initial%20Product%20Audit.md#update--2026-05-13-pwa-finding-reframed).
-- [ ] **Fix OG metadata.** `og:title` still says "Short Seven" and the OG image is the default Lovable preview. Shared links look generic.
-- [ ] **Remove `user-scalable=no` from the viewport.** Accessibility regression (WCAG 1.4.4 — users must be able to zoom).
-- [ ] **Replace the `window.confirm()` quit dialog** with an in-app modal styled to match the rest of the UI.
+- [x] **Fix OG metadata.** `og:title` was "Short Seven" and the OG image was the default Lovable preview. Now points to the production icon with a `summary` Twitter card.
+- [x] **Remove `user-scalable=no` from the viewport.** Accessibility regression (WCAG 1.4.4 — users must be able to zoom). ([details](./documentation/2026-05-15%20Lessons%20from%20Removing%20user-scalable%3Dno.md))
+- [x] **Replace the `window.confirm()` quit dialog** with an in-app modal styled to match the rest of the UI. Also swept the history "delete session" confirm at the same time.
 
 ### Next (P1 — UX gaps)
 
