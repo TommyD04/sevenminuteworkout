@@ -1,25 +1,47 @@
-// Cache-on-fetch service worker (V2 of offline support).
-// V3 will add a build-time precache manifest. V4 will add the update banner.
+// Build-time precache service worker (V3 of offline support).
+//
+// vite-plugin-sw.ts substitutes two tokens during `closeBundle`:
+//   - the SW_VERSION string literal below (currently "__" + "SW_VERSION__")
+//     becomes a 12-char content hash of the precache list.
+//   - the single-element PRECACHE array literal becomes the real array of URLs.
+// The version hash is derived from the list contents, so any change to
+// shipped assets produces a new SW byte stream — which is what tells the
+// browser an update is available.
 //
 // Strategy:
-//   install   - pre-warm the app shell (/) so cold-boot offline has something to render
-//   activate  - claim clients, purge any old caches we own
-//   fetch     - GET only. Same-origin navigations: NetworkFirst with cache fallback.
-//               Same-origin assets (hashed by Vite): CacheFirst, populated on first hit.
+//   install   - precache the full app shell (HTML, JS chunks, CSS, icons, manifest)
+//               so cold-boot offline works for any route on first launch.
+//   activate  - claim clients, purge any old caches we own.
+//   fetch     - GET only. Same-origin navigations: NetworkFirst with cache fallback
+//               to the precached URL or `/`. Same-origin assets: CacheFirst (precached
+//               on install; runtime additions populate misses).
 //               Cross-origin (fonts, etc.): pass through; V5 will add SWR for Google Fonts.
 
-const VERSION = "v1";
+const VERSION = "__SW_VERSION__";
 const CACHE = `workout-pwa-${VERSION}`;
 const APP_SHELL = "/";
+const PRECACHE = ["__PRECACHE__"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE)
-      .then((cache) => cache.add(new Request(APP_SHELL, { cache: "reload" })))
-      .catch(() => {
-        // Network can flake during install; the cache-on-fetch path will recover.
-      }),
+    (async () => {
+      const cache = await caches.open(CACHE);
+      // Reload mode bypasses HTTP cache so we get the freshly deployed bytes.
+      const requests = PRECACHE.map((url) => new Request(url, { cache: "reload" }));
+      // addAll is all-or-nothing; fall back to individual adds so a single 404
+      // (e.g. a renamed asset between deploy and SW install) doesn't abort install.
+      try {
+        await cache.addAll(requests);
+      } catch {
+        await Promise.all(
+          requests.map((req) =>
+            cache.add(req).catch(() => {
+              // Skip individual failures; runtime cache-on-fetch will recover.
+            }),
+          ),
+        );
+      }
+    })(),
   );
 });
 
