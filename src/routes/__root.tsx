@@ -7,6 +7,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
+import { useEffect } from "react";
 
 import appCss from "../styles.css?url";
 
@@ -139,6 +140,14 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    if (import.meta.env.DEV) return;
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch((error) => {
+      console.error("Service worker registration failed:", error);
+    });
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
