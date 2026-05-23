@@ -11,6 +11,7 @@ import {
 } from "@/lib/workout";
 import { loadSelectedRoutine } from "@/lib/storage";
 import { unlockAudio, tickBeep, startBeep, restBeep, finishBeep, speak } from "@/lib/audio";
+import { startBuzz, restBuzz, finishBuzz } from "@/lib/haptics";
 import { saveSession } from "@/lib/storage";
 import {
   AlertDialog,
@@ -120,11 +121,13 @@ function WorkoutPage() {
       setProgress(0);
       phaseStartRef.current = performance.now();
       startBeep();
+      startBuzz();
       speak(`${EXERCISES[0].name}.`);
     } else if (p === "work") {
       const isLast = i === EXERCISES.length - 1;
       if (isLast) {
         finishBeep();
+        finishBuzz();
         doneRef.current = true;
         setDone(true);
         return;
@@ -135,6 +138,7 @@ function WorkoutPage() {
       setProgress(0);
       phaseStartRef.current = performance.now();
       restBeep();
+      restBuzz();
       speak(`Rest. Next: ${EXERCISES[i + 1].name}.`);
     } else {
       // rest -> next work
@@ -146,6 +150,7 @@ function WorkoutPage() {
       setProgress(0);
       phaseStartRef.current = performance.now();
       startBeep();
+      startBuzz();
       speak(`${EXERCISES[nextIdx].name}.`);
     }
   }
