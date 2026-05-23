@@ -10,14 +10,7 @@ import {
   type Phase,
 } from "@/lib/workout";
 import { loadSelectedRoutine } from "@/lib/storage";
-import {
-  unlockAudio,
-  tickBeep,
-  startBeep,
-  restBeep,
-  finishBeep,
-  speak,
-} from "@/lib/audio";
+import { unlockAudio, tickBeep, startBeep, restBeep, finishBeep, speak } from "@/lib/audio";
 import { saveSession } from "@/lib/storage";
 import {
   AlertDialog,
@@ -30,7 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { buttonVariants } from "@/components/ui/button";
-
+import { useWakeLock } from "@/hooks/use-wake-lock";
 
 export const Route = createFileRoute("/workout")({
   validateSearch: (s: Record<string, unknown>) => ({
@@ -43,8 +36,6 @@ export const Route = createFileRoute("/workout")({
   component: WorkoutPage,
 });
 
-type WakeLockSentinelLike = { release: () => Promise<void> };
-
 function phaseDuration(phase: Phase): number {
   if (phase === "work") return WORK_SECONDS;
   if (phase === "rest") return REST_SECONDS;
@@ -55,7 +46,11 @@ function WorkoutPage() {
   const navigate = useNavigate();
   const { test, routine: routineParam } = Route.useSearch();
   const [activeRoutine] = useState(() => {
-    const id = routineParam ?? (typeof window !== "undefined" ? loadSelectedRoutine(DEFAULT_ROUTINE_ID) : DEFAULT_ROUTINE_ID);
+    const id =
+      routineParam ??
+      (typeof window !== "undefined"
+        ? loadSelectedRoutine(DEFAULT_ROUTINE_ID)
+        : DEFAULT_ROUTINE_ID);
     return ROUTINES.find((r) => r.id === id && !r.locked) ?? ROUTINES[0];
   });
   const EXERCISES = activeRoutine.exercises;
@@ -69,9 +64,13 @@ function WorkoutPage() {
   const [quitOpen, setQuitOpen] = useState(false);
   const wasPausedBeforeQuitRef = useRef(false);
 
+  // Hold the screen wake lock for the full workout, including the post-workout
+  // difficulty rating screen. The hook re-acquires on visibilitychange so the
+  // lock survives a tab switch / incoming call mid-set.
+  useWakeLock(true);
+
   // Refs (don't trigger re-render)
   const startTimeRef = useRef<number>(Date.now());
-  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
   const phaseStartRef = useRef<number>(performance.now());
   const pauseOffsetRef = useRef<number>(0); // ms accumulated while paused not used; we shift phaseStart instead
   const pauseAtRef = useRef<number | null>(null);
@@ -92,22 +91,11 @@ function WorkoutPage() {
     doneRef.current = done;
   }, [done]);
 
-  // Wake lock + audio unlock + initial cue
+  // Audio unlock + initial cue. Runs in the same tick as the mount, so the
+  // user-gesture from the preceding "Start" tap is still active.
   useEffect(() => {
     unlockAudio();
     speak(`Get ready. ${EXERCISES[0].name} in five.`);
-    const nav = navigator as Navigator & {
-      wakeLock?: { request: (t: "screen") => Promise<WakeLockSentinelLike> };
-    };
-    nav.wakeLock?.request("screen").then(
-      (lock) => {
-        wakeLockRef.current = lock;
-      },
-      () => {},
-    );
-    return () => {
-      wakeLockRef.current?.release().catch(() => {});
-    };
   }, []);
 
   // Pause / resume: shift phaseStart so elapsed stays continuous
@@ -191,7 +179,6 @@ function WorkoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-
   function openQuitDialog() {
     wasPausedBeforeQuitRef.current = paused;
     if (!paused) setPaused(true);
@@ -247,11 +234,7 @@ function WorkoutPage() {
   const next = EXERCISES[index + 1];
   const Icon = current.icon;
   const ringColor =
-    phase === "work"
-      ? "var(--primary)"
-      : phase === "rest"
-        ? "var(--rest)"
-        : "var(--primary)";
+    phase === "work" ? "var(--primary)" : phase === "rest" ? "var(--rest)" : "var(--primary)";
 
   return (
     <main className="min-h-screen flex flex-col px-6 pt-16 pb-8 max-w-md mx-auto">
@@ -290,14 +273,7 @@ function WorkoutPage() {
       {/* Timer ring */}
       <div className="relative mx-auto w-64 h-64 my-2">
         <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-          <circle
-            cx="50"
-            cy="50"
-            r="46"
-            fill="none"
-            stroke="var(--secondary)"
-            strokeWidth="6"
-          />
+          <circle cx="50" cy="50" r="46" fill="none" stroke="var(--secondary)" strokeWidth="6" />
           <circle
             cx="50"
             cy="50"
@@ -308,7 +284,6 @@ function WorkoutPage() {
             strokeLinecap="round"
             strokeDasharray={2 * Math.PI * 46}
             strokeDashoffset={2 * Math.PI * 46 * (1 - progress)}
-            
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -349,7 +324,11 @@ function WorkoutPage() {
           className="flex items-center justify-center gap-2 rounded-full bg-secondary text-foreground w-20 h-20 active:scale-95 transition-transform"
           aria-label={paused ? "Resume" : "Pause"}
         >
-          {paused ? <Play className="w-8 h-8 fill-current" /> : <Pause className="w-8 h-8 fill-current" />}
+          {paused ? (
+            <Play className="w-8 h-8 fill-current" />
+          ) : (
+            <Pause className="w-8 h-8 fill-current" />
+          )}
         </button>
       </div>
 
@@ -407,31 +386,26 @@ function DoneScreen({
             How hard was that?
           </p>
           <div className="flex justify-between gap-2">
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button
-              key={n}
-              onClick={() => setDifficulty(n)}
-              className="flex-1 aspect-square rounded-2xl border-2 font-display font-bold text-2xl tabular transition-all active:scale-95"
-              style={{
-                borderColor:
-                  difficulty === n ? "var(--primary)" : "var(--border)",
-                backgroundColor:
-                  difficulty === n ? "var(--primary)" : "transparent",
-                color:
-                  difficulty === n
-                    ? "var(--primary-foreground)"
-                    : "var(--foreground)",
-              }}
-            >
-              {n}
-            </button>
-          ))}
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button
+                key={n}
+                onClick={() => setDifficulty(n)}
+                className="flex-1 aspect-square rounded-2xl border-2 font-display font-bold text-2xl tabular transition-all active:scale-95"
+                style={{
+                  borderColor: difficulty === n ? "var(--primary)" : "var(--border)",
+                  backgroundColor: difficulty === n ? "var(--primary)" : "transparent",
+                  color: difficulty === n ? "var(--primary-foreground)" : "var(--foreground)",
+                }}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground mt-2 px-1">
+            <span>Easy</span>
+            <span>Brutal</span>
+          </div>
         </div>
-        <div className="flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground mt-2 px-1">
-          <span>Easy</span>
-          <span>Brutal</span>
-        </div>
-      </div>
       )}
 
       <div className="mt-auto space-y-3">
@@ -443,10 +417,7 @@ function DoneScreen({
           {test ? "Done" : "Save"}
         </button>
         {!test && (
-          <Link
-            to="/"
-            className="block text-center text-sm text-muted-foreground py-2"
-          >
+          <Link to="/" className="block text-center text-sm text-muted-foreground py-2">
             Skip
           </Link>
         )}
