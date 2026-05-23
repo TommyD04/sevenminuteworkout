@@ -45,6 +45,16 @@ self.addEventListener("install", (event) => {
   );
 });
 
+// Page → SW handshake: the in-app "Reload to update" banner posts SKIP_WAITING
+// when the user opts in to the new version. self.skipWaiting() promotes the
+// installed-but-waiting SW to active, which fires controllerchange in every
+// open tab. The page-side hook reloads on that signal.
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {

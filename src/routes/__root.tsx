@@ -7,9 +7,8 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect } from "react";
-
 import appCss from "../styles.css?url";
+import { UpdateBanner } from "@/components/update-banner";
 
 function NotFoundComponent() {
   return (
@@ -74,8 +73,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       {
         name: "viewport",
-        content:
-          "width=device-width, initial-scale=1, viewport-fit=cover",
+        content: "width=device-width, initial-scale=1, viewport-fit=cover",
       },
       { name: "theme-color", content: "#070e16" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
@@ -89,9 +87,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "7-Minute Workout" },
       { property: "og:title", content: "7-Minute Workout" },
       { name: "twitter:title", content: "7-Minute Workout" },
-      { name: "description", content: "Quick seven minute workout mobile app, written in a coffee store" },
-      { property: "og:description", content: "Quick seven minute workout mobile app, written in a coffee store" },
-      { name: "twitter:description", content: "Quick seven minute workout mobile app, written in a coffee store" },
+      {
+        name: "description",
+        content: "Quick seven minute workout mobile app, written in a coffee store",
+      },
+      {
+        property: "og:description",
+        content: "Quick seven minute workout mobile app, written in a coffee store",
+      },
+      {
+        name: "twitter:description",
+        content: "Quick seven minute workout mobile app, written in a coffee store",
+      },
       { property: "og:image", content: "https://sevenminuteworkout.lovable.app/icon-512.png" },
       { name: "twitter:image", content: "https://sevenminuteworkout.lovable.app/icon-512.png" },
       { name: "twitter:card", content: "summary" },
@@ -141,17 +148,10 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
-  useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    if (import.meta.env.DEV) return;
-    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch((error) => {
-      console.error("Service worker registration failed:", error);
-    });
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
+      <UpdateBanner />
     </QueryClientProvider>
   );
 }
