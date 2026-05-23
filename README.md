@@ -89,6 +89,21 @@ I'll add to this as I learn. If you have strong opinions about Bun in 2026, I wa
 
 Reverse-chronological. Each entry links to longer-form notes where they exist.
 
+### 2026-05-23 — Off-screen feedback: wake lock and haptics
+
+Two small P1 gaps shipped together because they share a theme: **the workout happens away from the screen.** The existing wake lock acquired once on mount and never came back — the OS auto-releases the lock the first time the document goes hidden (tab switch, phone call), so after the first interruption the screen dimmed for the rest of the workout. Extracted into a `useWakeLock` hook that listens to both `visibilitychange` (intent: I want a new lock) and the sentinel's `release` event (observation: my lock is gone), plus `inFlight` + `cancelled` guards around the async acquire. Then added `navigator.vibrate` cues at the three phase boundaries — work start, rest start, finish — pulses cadenced to mirror the existing audio beeps. Lives in a new `src/lib/haptics.ts` module parallel to `audio.ts` so a future independent mute toggle is a one-line change.
+
+**Patterns I'm internalizing:**
+
+- **Acquire + revoke event together.** Every browser API that hands you a revocable handle (wake lock, audio context, geolocation watch, media stream, persistent storage) needs both an acquire call and a paired revocation listener. If you only have one, the other is the bug-in-waiting.
+- **Observation vs. intent listeners.** Resource events come in conjugate pairs — one says "your state changed," one says "I want to drive new state." Wire both. With `release` alone you know the lock is gone but never ask for a new one; with `visibilitychange` alone you ask for a new one without knowing the old reference is stale.
+- **Two concurrency guards around any `await` in an effect.** `inFlight` closes the re-entry window between starting and finishing the request. `cancelled` closes the unmount-during-request window. Different bugs, different symptoms, same shape — anything that lives across an `await` needs a guard at both ends.
+- **Cue density is a UX decision.** Naïve translation "every audio cue gets a haptic cue" is wrong. The 5-4-3-2-1 countdown is already audible; adding a buzz per tick is how apps train users to mute notifications. Phase changes — moments when the user has to *change* what they're doing — are where the buzz earns its keep.
+- **Progressive enhancement in the original sense.** `navigator.vibrate` doesn't exist on iOS Safari, full stop. Audio must remain the load-bearing feedback channel because it's the only one available on every target. Haptics layer on Android as a bonus.
+- **Parallel modules for parallel concerns.** Audio and haptics share call sites today but are likely to be controlled separately tomorrow (mute one without the other). Splitting `haptics.ts` from `audio.ts` cost one import and bought a cheap seam for the future settings page.
+
+Full notes: [Lessons from the Hands-Off UX Polish](./documentation/2026-05-23%20Lessons%20from%20the%20Hands-Off%20UX%20Polish.md)
+
 ### 2026-05-23 — The PWA offline arc, sliced five ways
 
 Took the app from "a website on a phone" to "a phone-shaped app that survives a flight, tells you when it's been updated, and renders in the right typeface offline," in five small commits. V1 shipped the icons + manifest colors needed to be installable without a white-flash splash. V2 added a handwritten service worker for cache-on-fetch. V3 added a build-time precache so even never-visited routes work on a cold-start offline. V4 closed the update loop with an in-app "A new version is available" banner — without it, the browser's "waiting" state silently parks deploys behind every-tab-closes, which in practice never happens. V5 added stale-while-revalidate for Google Fonts in a deliberately separate cache that survives deploys.
@@ -189,8 +204,8 @@ The list below comes straight from the [initial audit](./documentation/2026-05-1
 
 ### Next (P1 — UX gaps)
 
-- [ ] **Acquire a wake lock during workouts** so the screen doesn't dim mid-burpee.
-- [ ] **Haptic feedback on phase changes** (`navigator.vibrate`) to back up the audio cues.
+- [x] **Acquire a wake lock during workouts** so the screen doesn't dim mid-burpee. Existing one-shot acquire died on the first `visibilitychange`; now lives in a `useWakeLock` hook that re-acquires on visibility and tracks `release` events. ([details](./documentation/2026-05-23%20Lessons%20from%20the%20Hands-Off%20UX%20Polish.md))
+- [x] **Haptic feedback on phase changes** (`navigator.vibrate`) to back up the audio cues. Three buzzes at the phase boundaries (work / rest / finish), not on the tick countdown. iOS Safari has no support — audio carries that platform. ([details](./documentation/2026-05-23%20Lessons%20from%20the%20Hands-Off%20UX%20Polish.md))
 - [ ] **Make "Test run" actually do something.** Either shorten the intervals (5s work / 2s rest) or rename the option to be honest about what it does.
 - [ ] **Save partial workouts on quit.** Right now quitting throws away the progress. At minimum: record that a session was started.
 - [ ] **Fix the rest screen.** Currently shows the previous exercise's icon and label; should preview the _next_ one.
