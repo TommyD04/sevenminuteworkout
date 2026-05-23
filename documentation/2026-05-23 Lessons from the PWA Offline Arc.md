@@ -1,13 +1,13 @@
 # Lessons from the PWA Offline Arc
 
 **Date:** 2026-05-23
-**Case:** Four small commits shipped over a few sessions that took the app from "a website that happens to run on a phone" to "a phone-shaped app that survives a flight to Hawaii and tells you when it's been updated." Worth dwelling on because — for one of the first times on this project — I broke a piece of work into vertical slices on purpose, used a rubber-duck pass to catch real bugs before writing code, and saw the same patterns (snapshot-at-boot, content-hashed everything, SSR boundaries) show up at every layer.
+**Case:** Five small commits shipped over a few sessions that took the app from "a website that happens to run on a phone" to "a phone-shaped app that survives a flight to Hawaii, tells you when it's been updated, and renders in the right typeface offline." Worth dwelling on because — for one of the first times on this project — I broke a piece of work into vertical slices on purpose, used a rubber-duck pass to catch real bugs before writing code, and saw the same patterns (snapshot-at-boot, content-hashed everything, SSR boundaries, separate caches for separate lifetimes) show up at every layer.
 
 ---
 
-## The arc in four sentences
+## The arc in five sentences
 
-V1 ([4278080](https://github.com/TommyD04/sevenminuteworkout/commit/4278080)) shipped the icons and manifest colors needed for the app to be _installable_ without a white-flash splash. V2 ([ba8402d](https://github.com/TommyD04/sevenminuteworkout/commit/ba8402d)) added a handwritten service worker that cached pages and assets on the fly, so any previously-visited route worked offline. V3 ([696e87d](https://github.com/TommyD04/sevenminuteworkout/commit/696e87d)) added a build-time precache manifest so even routes the user _never_ visited worked on a cold-start offline. V4 ([b136525](https://github.com/TommyD04/sevenminuteworkout/commit/b136525)) closed the loop with an in-app "A new version is available — Reload" banner, because without that, the new SW politely waits for every tab to close before activating, which in practice never happens.
+V1 ([4278080](https://github.com/TommyD04/sevenminuteworkout/commit/4278080)) shipped the icons and manifest colors needed for the app to be _installable_ without a white-flash splash. V2 ([ba8402d](https://github.com/TommyD04/sevenminuteworkout/commit/ba8402d)) added a handwritten service worker that cached pages and assets on the fly, so any previously-visited route worked offline. V3 ([696e87d](https://github.com/TommyD04/sevenminuteworkout/commit/696e87d)) added a build-time precache manifest so even routes the user _never_ visited worked on a cold-start offline. V4 ([b136525](https://github.com/TommyD04/sevenminuteworkout/commit/b136525)) closed the update loop with an in-app "A new version is available — Reload" banner, because without that, the new SW politely waits for every tab to close before activating, which in practice never happens. V5 ([d5e7979](https://github.com/TommyD04/sevenminuteworkout/commit/d5e7979)) added Stale-While-Revalidate for the Google Fonts CSS + woff2 binaries, in a deliberately separate cache that survives deploys — fonts don't change with our code, and shouldn't pay the version-bump tax.
 
 ---
 
@@ -97,14 +97,15 @@ The constraint shows up at three concrete points in V1-V4:
 
 The thing I'd done wrong on this kind of work in the past is what I'll call **The Iceberg PR**: a single 700-line commit titled `feat: add PWA support` that adds the manifest, the icons, the SW, the precache, _and_ the update banner all together. It's a nightmare to review. It's a nightmare to revert. And if any one piece is wrong (say, the SW is over-aggressive about caching) you can't peel just that piece off.
 
-V1–V4 were deliberately _vertical_: each commit is on its own _shippable_, _demonstrable_, and _reversible_.
+V1–V5 were deliberately _vertical_: each commit is on its own _shippable_, _demonstrable_, and _reversible_.
 
-| Slice | What ships             | Demonstrable how                                                     |
-| ----- | ---------------------- | -------------------------------------------------------------------- |
-| V1    | Icons + colors aligned | "It installs, splash flows into app"                                 |
-| V2    | Cache-on-fetch SW      | "Visit `/history`, go offline, refresh — works"                      |
-| V3    | Build-time precache    | "Install, go offline, navigate to a route you never visited — works" |
-| V4    | Update banner          | "Deploy a change, banner appears, click reload — new code"           |
+| Slice | What ships             | Demonstrable how                                                       |
+| ----- | ---------------------- | ---------------------------------------------------------------------- |
+| V1    | Icons + colors aligned | "It installs, splash flows into app"                                   |
+| V2    | Cache-on-fetch SW      | "Visit `/history`, go offline, refresh — works"                        |
+| V3    | Build-time precache    | "Install, go offline, navigate to a route you never visited — works"   |
+| V4    | Update banner          | "Deploy a change, banner appears, click reload — new code"             |
+| V5    | SWR for Google Fonts   | "Cold boot offline, fonts still render in Inter — not system fallback" |
 
 Each slice was self-contained enough to commit with a real message, and each one moved a user-observable property from one state to another. None of them were "scaffolding for the next step" without delivering value of their own.
 
@@ -159,6 +160,33 @@ This isn't an anti-library stance — it's a "match the dependency cost to the p
 
 ---
 
+## Angle 9 — Architecture: separate caches for separate lifetimes
+
+V5 (stale-while-revalidate for Google Fonts) surfaced a small but generalizable point. The natural instinct is "one cache, period — it's all just bytes." But the fonts and the app bundle have **different lifetimes for completely different reasons**:
+
+- The app bundle changes whenever we deploy. Its cache is named `workout-pwa-<hash>`. On deploy, the SW activates, the old cache name no longer matches, and the activate handler purges it. That's correct — yesterday's `index-Bx7Yh2.js` is genuinely stale.
+- Google Fonts woff2 binaries don't change because _we_ deployed. They change only when Google updates their fonts subsets (rarely), or when we change the `<link>` URL (almost never). If they lived in the versioned app cache, we'd re-download ~200KB of woff2 binaries on every deploy for no reason — they'd be served from the cache while the SW was activating, and then they'd be gone.
+
+So V5 puts fonts in their own cache (`workout-fonts-v1`) that's **not** named after the app version, and updates the `activate` purge filter to handle two prefixes:
+
+```js
+.filter((k) => {
+  if (k.startsWith("workout-pwa-")) return k !== CACHE;
+  if (k.startsWith("workout-fonts-")) return k !== FONTS_CACHE;
+  return false;
+})
+```
+
+There are two patterns here worth pulling out:
+
+**1. Pair the cache lifetime to the invalidator, not to the convenience.** "I'll just use one cache" is convenient. It's also wrong if two things in the cache have different reasons to become stale. Same shape as splitting database tables by access pattern, or splitting object lifetimes in a memory pool.
+
+**2. Cross-origin caching opens up an allowlist question that same-origin doesn't.** For same-origin you can default to "cache everything" because everything is yours. For cross-origin, default to passthrough and explicitly opt in to specific origins. V5 uses `FONT_ORIGINS = new Set([...])` — if I add a third party tomorrow (analytics, embed), it won't silently get cached. The default-deny posture is doing real work.
+
+A third smaller-but-fun point V5 surfaced: **the SW's identity and the precache's identity are independent layers.** Our `VERSION` hash is derived from the precache list, but the precache list excludes `sw.js` itself. So a V5 deploy (which only changes `sw.js`) leaves the hash unchanged — yet the browser still detects the update, because it diffs the SW file _bytes_ at registration time. The hash governs "did the shipped assets change?"; the SW file diff governs "is this a new SW?". Both are content-identity, at different scopes.
+
+---
+
 ## Patterns and antipatterns to recognize next time
 
 ### Patterns ✅
@@ -173,6 +201,9 @@ This isn't an anti-library stance — it's a "match the dependency cost to the p
 - **SSR-boundary gates everywhere browser APIs are touched.** `useEffect`, env checks, `*.server.ts` filenames — the gate is contextual; the discipline is universal.
 - **Self-announcing UI needs `role="status" + aria-live="polite"`.** Unsolicited screen reader announcements without focus theft.
 - **Fallback timeouts for any "wait for an event that should fire."** If the user took an action, honor it even if the event you were waiting on goes missing.
+- **Pair cache lifetime to its invalidator.** Two things with different reasons to become stale belong in two caches.
+- **Default-deny for cross-origin side effects.** Same-origin can opt-out; cross-origin should opt-in via an explicit allowlist.
+- **`event.waitUntil(promise)` for fire-and-forget work inside `respondWith`.** Otherwise the SW can go idle before the background refresh lands.
 
 ### Antipatterns ❌
 
@@ -182,15 +213,17 @@ This isn't an anti-library stance — it's a "match the dependency cost to the p
 - **Wall-clock or revision identity used where content identity is what you mean.** Spurious updates, real updates missed.
 - **A template that's broken without its templating engine.** Two debugging surfaces for the price of one.
 - **Heavy dep with weird integration surface, picked for ergonomic feature parity.** The integration cost is the dependency cost.
+- **One cache for everything.** Convenient until two of those things have different reasons to invalidate.
+- **Default-cache cross-origin requests.** Silently caching analytics, embeds, or trackers you didn't think about.
 
 ---
 
 ## Open questions for next time
 
-1. **V5 — stale-while-revalidate for cross-origin Google Fonts.** The current SW passes cross-origin requests through. Worth caching with SWR so fonts render offline on cold boot. Small slice; should be one commit.
-2. **Update banner copy.** "A new version is available" is fine but bland. Worth experimenting with copy that signals _what_ changed — but only if we can do that without a manifest of release notes the user has to read.
-3. **What's the right cadence for `registration.update()`?** Browsers auto-check the SW byte stream periodically (every 24h, plus on each navigation). For a hobby app that's fine. For an app where deploys are more frequent, a manual `reg.update()` on tab focus would shorten the latency from deploy to banner-shown.
-4. **Telemetry temptation.** It would be useful to know "how often is the banner shown vs clicked?" — but adding telemetry would compromise the no-account, no-tracking promise of this app. Worth being deliberate about _not_ adding it, and writing down why.
+1. **Update banner copy.** "A new version is available" is fine but bland. Worth experimenting with copy that signals _what_ changed — but only if we can do that without a manifest of release notes the user has to read.
+2. **What's the right cadence for `registration.update()`?** Browsers auto-check the SW byte stream periodically (every 24h, plus on each navigation). For a hobby app that's fine. For an app where deploys are more frequent, a manual `reg.update()` on tab focus would shorten the latency from deploy to banner-shown.
+3. **Telemetry temptation.** It would be useful to know "how often is the banner shown vs clicked?" — but adding telemetry would compromise the no-account, no-tracking promise of this app. Worth being deliberate about _not_ adding it, and writing down why.
+4. **Pre-warming the fonts cache at install time.** SWR catches subsequent visits, but the first cold-boot offline still falls back to system fonts. We _could_ add the Google Fonts CSS + a known-good set of woff2 URLs to the install handler, putting them in `FONTS_CACHE` directly. Workbox warns that the Google Fonts CSS varies by user agent — the SW's UA might fetch a different subset than the browser's UA would. Tradeoff worth thinking about, not worth shipping today.
 5. **Are there other "the platform default is conservative for safety, but the app needs to surface it" patterns lurking?** The `beforeunload` warning is one. Wake locks (in the roadmap) are another. Maybe worth a pass.
 
 ---
@@ -199,11 +232,14 @@ This isn't an anti-library stance — it's a "match the dependency cost to the p
 
 - **A PWA is three things: a manifest, icons, and a service worker.** Each ships independently.
 - **The SW "waiting" state is the central UX problem of PWAs.** The browser default is correct and conservative; your app has to give the user the steering wheel.
-- **Vertical-slice infrastructure work.** V1→V2→V3→V4. Each slice ships. Each slice is reversible.
-- **Content-hash the thing whose identity matters.** Same primitive at every layer.
+- **Vertical-slice infrastructure work.** V1→V2→V3→V4→V5. Each slice ships. Each slice is reversible.
+- **Content-hash the thing whose identity matters.** Same primitive at every layer — and at multiple _scopes_ within the same layer (SW file bytes vs. precache list hash live independently).
 - **Make templates valid versions of themselves.** Substitution narrows; it doesn't validate.
 - **Snapshot at boot, compare on event.** One-line pattern that fixes whole classes of "first time vs update" bugs.
 - **Check whether the primitive already broadcasts.** `controllerchange` is multi-tab reload for free.
+- **Pair cache lifetime to its invalidator.** Fonts and app bundles invalidate for different reasons; they belong in different caches.
+- **Default-deny cross-origin caching.** Same-origin opt-out; cross-origin opt-in.
+- **`event.waitUntil` for fire-and-forget work inside `respondWith`.** Otherwise the SW can go idle before the background refresh lands.
 - **Rubber-duck the plan before writing code.** Two real bugs caught in V4 at zero implementation cost.
 - **SSR-boundary discipline is the texture of this codebase, not a one-time gotcha.** Three lessons docs in a row have touched it. There will be more.
 - **Custom small code beats heavy dep when the integration surface is weird.** 115 readable lines >> a feature-complete library you can't debug.

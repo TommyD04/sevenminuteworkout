@@ -89,18 +89,20 @@ I'll add to this as I learn. If you have strong opinions about Bun in 2026, I wa
 
 Reverse-chronological. Each entry links to longer-form notes where they exist.
 
-### 2026-05-23 — The PWA offline arc, sliced four ways
+### 2026-05-23 — The PWA offline arc, sliced five ways
 
-Took the app from "a website on a phone" to "a phone-shaped app that survives a flight and tells you when it's been updated," in four small commits. V1 shipped the icons + manifest colors needed to be installable without a white-flash splash. V2 added a handwritten service worker for cache-on-fetch. V3 added a build-time precache so even never-visited routes work on a cold-start offline. V4 closed the loop with an in-app "A new version is available" banner — without it, the browser's "waiting" state silently parks deploys behind every-tab-closes, which in practice never happens.
+Took the app from "a website on a phone" to "a phone-shaped app that survives a flight, tells you when it's been updated, and renders in the right typeface offline," in five small commits. V1 shipped the icons + manifest colors needed to be installable without a white-flash splash. V2 added a handwritten service worker for cache-on-fetch. V3 added a build-time precache so even never-visited routes work on a cold-start offline. V4 closed the update loop with an in-app "A new version is available" banner — without it, the browser's "waiting" state silently parks deploys behind every-tab-closes, which in practice never happens. V5 added stale-while-revalidate for Google Fonts in a deliberately separate cache that survives deploys.
 
 **Patterns I'm internalizing:**
 
 - **Decompose black-box concepts into parts.** A PWA is three things: manifest, icons, service worker. Each ships independently. Same shape as the viewport-tag-is-four-tokens decomposition from the last entry.
-- **Vertical-slice infrastructure work.** V1→V2→V3→V4. Each slice is shippable, demonstrable, reversible. The alternative — one 700-line "feat: add PWA support" commit — is what I'll call The Iceberg PR. Nightmare to review, impossible to roll back partially, no learning per layer.
-- **Content-hash the thing whose identity matters.** Hash the precache list to derive the SW version, not the timestamp. Asset content gets hashed into filenames. Same primitive at every layer of the stack.
-- **Make templates valid versions of themselves.** `public/sw.js` lints clean with `"__SW_VERSION__"` and `["__PRECACHE__"]` as placeholders because both are _already_ valid JS. The build plugin refines them; it doesn't validate them. Anytime your template is broken without the templating engine, you've created two debugging surfaces.
+- **Vertical-slice infrastructure work.** V1→V2→V3→V4→V5. Each slice is shippable, demonstrable, reversible. The alternative — one 700-line "feat: add PWA support" commit — is what I'll call The Iceberg PR. Nightmare to review, impossible to roll back partially, no learning per layer.
+- **Content-hash the thing whose identity matters.** Hash the precache list to derive the SW version, not the timestamp. Asset content gets hashed into filenames. Same primitive at multiple layers and multiple scopes — the SW _file bytes_ and the _precache list hash_ are independent content-identities.
+- **Make templates valid versions of themselves.** `public/sw.js` lints clean with `"__SW_VERSION__"` and `["__PRECACHE__"]` as placeholders because both are _already_ valid JS. The build plugin refines them; it doesn't validate them.
 - **Snapshot at boot, compare on event.** The `wasControlled = !!navigator.serviceWorker.controller` trick distinguishes "this is the first install" from "this is an update" with one bit of state. Generalizes everywhere.
 - **Check whether the platform primitive already broadcasts.** `controllerchange` fires in every controlled tab when one tab calls `skipWaiting()`. Multi-tab reload is free if you use it.
+- **Pair cache lifetime to its invalidator.** Fonts and the app bundle invalidate for different reasons (Google updates a subset vs. we ship a deploy) and belong in separate caches. "One cache for everything" is convenience masquerading as design.
+- **Default-deny cross-origin side effects.** Same-origin can opt-out; cross-origin should opt-in via an explicit allowlist (`FONT_ORIGINS`).
 - **Rubber-duck the plan, not just the implementation.** Two real bugs in V4 caught at zero implementation cost. The earliest moment is the cheapest moment.
 
 Full notes: [Lessons from the PWA Offline Arc](./documentation/2026-05-23%20Lessons%20from%20the%20PWA%20Offline%20Arc.md)
@@ -180,7 +182,7 @@ The list below comes straight from the [initial audit](./documentation/2026-05-1
 ### Now (P0 — bugs and basics)
 
 - [x] **Fix `/routine/<id>` deep-link crash.** SSR was serializing icon components in the loader return. ([details](./documentation/2026-05-12%20Lessons%20from%20the%20Routine%20Deep%20Link%20Crash.md))
-- [x] **Decide what we want from PWA.** Shipped as a four-commit arc (V1 icons + manifest colors → V2 cache-on-fetch SW → V3 build-time precache for cold-boot offline → V4 in-app "update available" banner). Full notes: [Lessons from the PWA Offline Arc](./documentation/2026-05-23%20Lessons%20from%20the%20PWA%20Offline%20Arc.md).
+- [x] **Decide what we want from PWA.** Shipped as a five-commit arc (V1 icons + manifest colors → V2 cache-on-fetch SW → V3 build-time precache for cold-boot offline → V4 in-app "update available" banner → V5 stale-while-revalidate for Google Fonts). Full notes: [Lessons from the PWA Offline Arc](./documentation/2026-05-23%20Lessons%20from%20the%20PWA%20Offline%20Arc.md).
 - [x] **Fix OG metadata.** `og:title` was "Short Seven" and the OG image was the default Lovable preview. Now points to the production icon with a `summary` Twitter card.
 - [x] **Remove `user-scalable=no` from the viewport.** Accessibility regression (WCAG 1.4.4 — users must be able to zoom). ([details](./documentation/2026-05-15%20Lessons%20from%20Removing%20user-scalable%3Dno.md))
 - [x] **Replace the `window.confirm()` quit dialog** with an in-app modal styled to match the rest of the UI. Also swept the history "delete session" confirm at the same time.
