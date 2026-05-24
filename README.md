@@ -89,6 +89,20 @@ I'll add to this as I learn. If you have strong opinions about Bun in 2026, I wa
 
 Reverse-chronological. Each entry links to longer-form notes where they exist.
 
+### 2026-05-23 — Pointing the rest screen forward
+
+The rest interval was showing the icon of the just-finished exercise and a generic "Catch your breath" label, when the moment is actually about previewing what's coming in 10 seconds. The `index` state correctly tracked the active exercise (including across its trailing rest), but the render block was applying a state-mirroring display contract when it needed a forward-looking one. Fix: introduce a `previewed = phase === "rest" ? (next ?? current) : current` derived value and route icon, name, and tip through it. Mirrors the existing `"First up: <name>"` convention from the ready phase as `"Up next: <name>"`. Net effect: fewer lines of code, correct behavior, no new visual shapes invented.
+
+**Patterns I'm internalizing:**
+
+- **Name the forward-looking concept when it diverges from "current."** As soon as the display contract is "show what the user is about to deal with," that's a different variable from `current`. The data model didn't need to change — only the derived value the view reads from.
+- **Reuse the encoding of the screen next door.** "First up:" → "Up next:" is the same shape with a different prefix. Don't invent a layout for a new use case if an existing one already encodes the concept.
+- **Identify the user's internal question and answer it.** "Catch your breath" tells the user what they already know. The valuable copy answers the question they're computing in their head right now — _what am I about to do?_
+- **Subtraction over addition (again).** Three nested conditionals reading from `current` and `next` collapsed into one derived variable. The fix made the file shorter, mirroring the earlier deep-link-crash lesson that removals are often safer than additions.
+- **Defensive fallbacks document invariants.** `next ?? current` can never fire (the last work transitions straight to `done`), but the fallback plus comment tells a future maintainer what's true and where to look if `advancePhase` ever changes.
+
+Full notes: [Lessons from Pointing the Rest Screen Forward](./documentation/2026-05-23%20Lessons%20from%20Pointing%20the%20Rest%20Screen%20Forward.md)
+
 ### 2026-05-23 — Off-screen feedback: wake lock and haptics
 
 Two small P1 gaps shipped together because they share a theme: **the workout happens away from the screen.** The existing wake lock acquired once on mount and never came back — the OS auto-releases the lock the first time the document goes hidden (tab switch, phone call), so after the first interruption the screen dimmed for the rest of the workout. Extracted into a `useWakeLock` hook that listens to both `visibilitychange` (intent: I want a new lock) and the sentinel's `release` event (observation: my lock is gone), plus `inFlight` + `cancelled` guards around the async acquire. Then added `navigator.vibrate` cues at the three phase boundaries — work start, rest start, finish — pulses cadenced to mirror the existing audio beeps. Lives in a new `src/lib/haptics.ts` module parallel to `audio.ts` so a future independent mute toggle is a one-line change.
@@ -98,7 +112,7 @@ Two small P1 gaps shipped together because they share a theme: **the workout hap
 - **Acquire + revoke event together.** Every browser API that hands you a revocable handle (wake lock, audio context, geolocation watch, media stream, persistent storage) needs both an acquire call and a paired revocation listener. If you only have one, the other is the bug-in-waiting.
 - **Observation vs. intent listeners.** Resource events come in conjugate pairs — one says "your state changed," one says "I want to drive new state." Wire both. With `release` alone you know the lock is gone but never ask for a new one; with `visibilitychange` alone you ask for a new one without knowing the old reference is stale.
 - **Two concurrency guards around any `await` in an effect.** `inFlight` closes the re-entry window between starting and finishing the request. `cancelled` closes the unmount-during-request window. Different bugs, different symptoms, same shape — anything that lives across an `await` needs a guard at both ends.
-- **Cue density is a UX decision.** Naïve translation "every audio cue gets a haptic cue" is wrong. The 5-4-3-2-1 countdown is already audible; adding a buzz per tick is how apps train users to mute notifications. Phase changes — moments when the user has to *change* what they're doing — are where the buzz earns its keep.
+- **Cue density is a UX decision.** Naïve translation "every audio cue gets a haptic cue" is wrong. The 5-4-3-2-1 countdown is already audible; adding a buzz per tick is how apps train users to mute notifications. Phase changes — moments when the user has to _change_ what they're doing — are where the buzz earns its keep.
 - **Progressive enhancement in the original sense.** `navigator.vibrate` doesn't exist on iOS Safari, full stop. Audio must remain the load-bearing feedback channel because it's the only one available on every target. Haptics layer on Android as a bonus.
 - **Parallel modules for parallel concerns.** Audio and haptics share call sites today but are likely to be controlled separately tomorrow (mute one without the other). Splitting `haptics.ts` from `audio.ts` cost one import and bought a cheap seam for the future settings page.
 
@@ -208,7 +222,7 @@ The list below comes straight from the [initial audit](./documentation/2026-05-1
 - [x] **Haptic feedback on phase changes** (`navigator.vibrate`) to back up the audio cues. Three buzzes at the phase boundaries (work / rest / finish), not on the tick countdown. iOS Safari has no support — audio carries that platform. ([details](./documentation/2026-05-23%20Lessons%20from%20the%20Hands-Off%20UX%20Polish.md))
 - [ ] **Make "Test run" actually do something.** Either shorten the intervals (5s work / 2s rest) or rename the option to be honest about what it does.
 - [ ] **Save partial workouts on quit.** Right now quitting throws away the progress. At minimum: record that a session was started.
-- [ ] **Fix the rest screen.** Currently shows the previous exercise's icon and label; should preview the _next_ one.
+- [x] **Fix the rest screen.** Previously showed the just-finished exercise's icon and a generic "Catch your breath" label. Now routes icon, name, and tip through a derived `previewed` value that points at the next exercise during rest. Mirrors the existing "First up:" convention as "Up next:". ([details](./documentation/2026-05-23%20Lessons%20from%20Pointing%20the%20Rest%20Screen%20Forward.md))
 - [x] **Match the manifest `background_color` to the actual app background.** Aligned to `#070e16` in V1 of the PWA arc — no more white flash on launch.
 
 ### Later (nice-to-haves)
