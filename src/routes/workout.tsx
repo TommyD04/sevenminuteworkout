@@ -237,7 +237,12 @@ function WorkoutPage() {
 
   const current = EXERCISES[index];
   const next = EXERCISES[index + 1];
-  const Icon = current.icon;
+  // During rest, the screen previews the upcoming exercise — icon, name, and
+  // tip all refer to the *next* exercise so the rest interval becomes mental
+  // prep time. `next` is guaranteed defined here because the final work phase
+  // transitions straight to `done`, never to rest (see advancePhase).
+  const previewed = phase === "rest" ? (next ?? current) : current;
+  const PreviewIcon = previewed.icon;
   const ringColor =
     phase === "work" ? "var(--primary)" : phase === "rest" ? "var(--rest)" : "var(--primary)";
 
@@ -304,22 +309,16 @@ function WorkoutPage() {
       {/* Current exercise */}
       <div className="text-center mt-6 px-4">
         <div className="flex items-center justify-center mb-3 text-primary">
-          <Icon className="w-10 h-10" strokeWidth={1.5} />
+          <PreviewIcon className="w-10 h-10" strokeWidth={1.5} />
         </div>
         <h2 className="font-display font-bold text-3xl leading-tight">
           {phase === "work"
-            ? current.name
+            ? previewed.name
             : phase === "ready"
-              ? `First up: ${current.name}`
-              : "Catch your breath"}
+              ? `First up: ${previewed.name}`
+              : `Up next: ${previewed.name}`}
         </h2>
-        <p className="text-sm text-muted-foreground mt-2 min-h-[2.5rem]">
-          {phase === "work"
-            ? current.tip
-            : phase === "ready"
-              ? current.tip
-              : `Up next: ${next?.name ?? "—"}`}
-        </p>
+        <p className="text-sm text-muted-foreground mt-2 min-h-[2.5rem]">{previewed.tip}</p>
       </div>
 
       {/* Pause */}
