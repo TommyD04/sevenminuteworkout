@@ -5,6 +5,7 @@ import {
   loadSessions,
   deleteSession,
   currentStreak,
+  isCompletedSession,
   type Session,
 } from "@/lib/storage";
 import {
@@ -36,10 +37,17 @@ function HistoryPage() {
 
   const total = sessions.length;
   const streak = currentStreak(sessions);
+  // Average difficulty is over rated sessions only — partials and
+  // reconciled-completeds have `difficulty: null` and should not pull
+  // the average toward zero.
+  const ratedSessions = sessions.filter(
+    (s): s is Session & { difficulty: number } => s.difficulty != null,
+  );
   const avgDifficulty =
-    total === 0
+    ratedSessions.length === 0
       ? 0
-      : sessions.reduce((sum, s) => sum + s.difficulty, 0) / total;
+      : ratedSessions.reduce((sum, s) => sum + s.difficulty, 0) /
+        ratedSessions.length;
 
   const pendingSession = pendingDeleteId
     ? sessions.find((s) => s.id === pendingDeleteId)
@@ -54,11 +62,26 @@ function HistoryPage() {
 
   function exportCsv() {
     if (sessions.length === 0) return;
-    const escape = (v: string | number) => {
+    // `escape` now handles null/undefined — partials export with empty
+    // difficulty, and the new schema fields slot in alongside the old
+    // ones for back-compat with anyone parsing previous exports.
+    const escape = (v: string | number | null | undefined) => {
+      if (v == null) return "";
       const s = String(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const header = ["date", "time", "routine", "duration_seconds", "difficulty", "note"];
+    const header = [
+      "date",
+      "time",
+      "routine",
+      "duration_seconds",
+      "difficulty",
+      "status",
+      "completed_exercises",
+      "total_exercises",
+      "skipped_count",
+      "note",
+    ];
     const rows = sessions
       .slice()
       .sort((a, b) => a.completedAt - b.completedAt)
@@ -67,7 +90,19 @@ function HistoryPage() {
         const date = d.toISOString().slice(0, 10);
         const time = d.toTimeString().slice(0, 5);
         const routine = s.routineName ?? "The Classic 7";
-        return [date, time, routine, s.durationSeconds, s.difficulty, s.note ?? ""]
+        const status = s.status ?? "completed";
+        return [
+          date,
+          time,
+          routine,
+          s.durationSeconds,
+          s.difficulty,
+          status,
+          s.completedExercises,
+          s.totalExercises,
+          s.skippedCount,
+          s.note ?? "",
+        ]
           .map(escape)
           .join(",");
       });
@@ -103,7 +138,7 @@ function HistoryPage() {
         <Stat label="Streak" value={streak} />
         <Stat
           label="Avg ⚡"
-          value={total ? avgDifficulty.toFixed(1) : "—"}
+          value={ratedSessions.length ? avgDifficulty.toFixed(1) : "—"}
         />
       </div>
 
@@ -129,47 +164,61 @@ function HistoryPage() {
         </div>
       ) : (
         <ul className="space-y-2">
-          {sessions.map((s) => (
-            <li
-              key={s.id}
-              className="rounded-2xl bg-card border border-border p-4 flex items-center justify-between"
-            >
-              <div>
-                <div className="font-display font-bold">
-                  {new Date(s.completedAt).toLocaleDateString(undefined, {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                  })}
+          {sessions.map((s) => {
+            const isPartial = !isCompletedSession(s);
+            const skipped = s.skippedCount ?? 0;
+            const partialBadge = isPartial
+              ? skipped > 0
+                ? `Partial · ${s.completedExercises ?? "?"}/${s.totalExercises ?? "?"} (${skipped} skipped)`
+                : `Partial · ${s.completedExercises ?? "?"}/${s.totalExercises ?? "?"}`
+              : null;
+            return (
+              <li
+                key={s.id}
+                className="rounded-2xl bg-card border border-border p-4 flex items-center justify-between"
+              >
+                <div>
+                  <div className="font-display font-bold">
+                    {new Date(s.completedAt).toLocaleDateString(undefined, {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </div>
+                  <div className="text-xs text-primary mt-0.5 font-medium">
+                    {s.routineName ?? "The Classic 7"}
+                  </div>
+                  {partialBadge && (
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1 inline-block rounded-full border border-border px-2 py-0.5">
+                      {partialBadge}
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground mt-0.5 font-mono">
+                    {new Date(s.completedAt).toLocaleTimeString(undefined, {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}{" "}
+                    · {Math.round(s.durationSeconds / 60)}m{s.durationSeconds % 60}s
+                  </div>
                 </div>
-                <div className="text-xs text-primary mt-0.5 font-medium">
-                  {s.routineName ?? "The Classic 7"}
+                <div className="flex items-center gap-3">
+                  <div className="font-display font-bold text-2xl tabular text-primary">
+                    {s.difficulty ?? "—"}
+                    <span className="text-xs text-muted-foreground font-normal">
+                      /5
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setPendingDeleteId(s.id)}
+                    className="p-2 text-muted-foreground active:text-destructive"
+                    aria-label="Delete session"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
-                <div className="text-xs text-muted-foreground mt-0.5 font-mono">
-                  {new Date(s.completedAt).toLocaleTimeString(undefined, {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}{" "}
-                  · {Math.round(s.durationSeconds / 60)}m{s.durationSeconds % 60}s
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="font-display font-bold text-2xl tabular text-primary">
-                  {s.difficulty}
-                  <span className="text-xs text-muted-foreground font-normal">
-                    /5
-                  </span>
-                </div>
-                <button
-                  onClick={() => setPendingDeleteId(s.id)}
-                  className="p-2 text-muted-foreground active:text-destructive"
-                  aria-label="Delete session"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
 
