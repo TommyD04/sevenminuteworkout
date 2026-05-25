@@ -4,15 +4,21 @@ import { Pause, Play, SkipForward, X } from "lucide-react";
 import {
   ROUTINES,
   DEFAULT_ROUTINE_ID,
-  WORK_SECONDS,
-  REST_SECONDS,
-  READY_SECONDS,
+  NORMAL_TEMPO,
+  TEST_TEMPO,
   type Phase,
+  type Tempo,
 } from "@/lib/workout";
-import { loadSelectedRoutine } from "@/lib/storage";
+import {
+  loadSelectedRoutine,
+  saveSession,
+  loadSessions,
+  todayCount,
+  currentStreak,
+  type Session,
+} from "@/lib/storage";
 import { unlockAudio, tickBeep, startBeep, restBeep, finishBeep, speak } from "@/lib/audio";
 import { startBuzz, restBuzz, finishBuzz } from "@/lib/haptics";
-import { saveSession } from "@/lib/storage";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,15 +43,21 @@ export const Route = createFileRoute("/workout")({
   component: WorkoutPage,
 });
 
-function phaseDuration(phase: Phase): number {
-  if (phase === "work") return WORK_SECONDS;
-  if (phase === "rest") return REST_SECONDS;
-  return READY_SECONDS;
+function phaseDuration(phase: Phase, tempo: Tempo): number {
+  if (phase === "work") return tempo.work;
+  if (phase === "rest") return tempo.rest;
+  return tempo.ready;
 }
 
 function WorkoutPage() {
   const navigate = useNavigate();
   const { test, routine: routineParam } = Route.useSearch();
+  // Test mode compresses the canonical 30/10/5 structure to 5/2/2 so the full
+  // flow (ready → all exercises → done → save-or-skip) finishes in ~84s
+  // without writing a real session to history. `test` comes from the URL and
+  // does not change for the life of the component, so capturing tempo by
+  // closure in the rAF loop below is safe.
+  const tempo: Tempo = test ? TEST_TEMPO : NORMAL_TEMPO;
   const [activeRoutine] = useState(() => {
     const id =
       routineParam ??
@@ -57,7 +69,7 @@ function WorkoutPage() {
   const EXERCISES = activeRoutine.exercises;
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("ready");
-  const [remaining, setRemaining] = useState(READY_SECONDS);
+  const [remaining, setRemaining] = useState(tempo.ready);
   const [progress, setProgress] = useState(0); // 0..1, smooth
   const [paused, setPaused] = useState(false);
   const [done, setDone] = useState(false);
@@ -75,7 +87,7 @@ function WorkoutPage() {
   const phaseStartRef = useRef<number>(performance.now());
   const pauseOffsetRef = useRef<number>(0); // ms accumulated while paused not used; we shift phaseStart instead
   const pauseAtRef = useRef<number | null>(null);
-  const lastRemainingRef = useRef<number>(READY_SECONDS);
+  const lastRemainingRef = useRef<number>(tempo.ready);
   const phaseRef = useRef<Phase>("ready");
   const indexRef = useRef<number>(0);
   const doneRef = useRef<boolean>(false);
@@ -96,7 +108,7 @@ function WorkoutPage() {
   // user-gesture from the preceding "Start" tap is still active.
   useEffect(() => {
     unlockAudio();
-    speak(`Get ready. ${EXERCISES[0].name} in five.`);
+    speak(`Get ready. ${EXERCISES[0].name} in ${tempo.ready}.`);
   }, []);
 
   // Pause / resume: shift phaseStart so elapsed stays continuous
@@ -116,8 +128,8 @@ function WorkoutPage() {
     const i = indexRef.current;
     if (p === "ready") {
       setPhase("work");
-      lastRemainingRef.current = WORK_SECONDS;
-      setRemaining(WORK_SECONDS);
+      lastRemainingRef.current = tempo.work;
+      setRemaining(tempo.work);
       setProgress(0);
       phaseStartRef.current = performance.now();
       startBeep();
@@ -133,8 +145,8 @@ function WorkoutPage() {
         return;
       }
       setPhase("rest");
-      lastRemainingRef.current = REST_SECONDS;
-      setRemaining(REST_SECONDS);
+      lastRemainingRef.current = tempo.rest;
+      setRemaining(tempo.rest);
       setProgress(0);
       phaseStartRef.current = performance.now();
       restBeep();
@@ -145,8 +157,8 @@ function WorkoutPage() {
       const nextIdx = i + 1;
       setIndex(nextIdx);
       setPhase("work");
-      lastRemainingRef.current = WORK_SECONDS;
-      setRemaining(WORK_SECONDS);
+      lastRemainingRef.current = tempo.work;
+      setRemaining(tempo.work);
       setProgress(0);
       phaseStartRef.current = performance.now();
       startBeep();
@@ -161,7 +173,7 @@ function WorkoutPage() {
     const loop = () => {
       if (!doneRef.current) {
         if (!pausedRef.current) {
-          const totalMs = phaseDuration(phaseRef.current) * 1000;
+          const totalMs = phaseDuration(phaseRef.current, tempo) * 1000;
           const elapsed = performance.now() - phaseStartRef.current;
           const clamped = Math.min(elapsed, totalMs);
           const prog = clamped / totalMs;
@@ -204,7 +216,7 @@ function WorkoutPage() {
 
   function skip() {
     // Force phase to end immediately
-    phaseStartRef.current = performance.now() - phaseDuration(phaseRef.current) * 1000;
+    phaseStartRef.current = performance.now() - phaseDuration(phaseRef.current, tempo) * 1000;
   }
 
   function saveAndExit() {
@@ -228,6 +240,7 @@ function WorkoutPage() {
     return (
       <DoneScreen
         test={test}
+        startTime={startTimeRef.current}
         difficulty={difficulty}
         setDifficulty={setDifficulty}
         onSave={saveAndExit}
@@ -362,15 +375,45 @@ function DoneScreen({
   difficulty,
   setDifficulty,
   onSave,
+  startTime,
 }: {
   test: boolean;
   difficulty: number | null;
   setDifficulty: (n: number) => void;
   onSave: () => void;
+  startTime: number;
 }) {
+  // Snapshot duration the moment the done screen mounts. After this, history
+  // can be re-read freely (e.g., StatTile updates) without the duration drifting.
+  const [durationSeconds] = useState(() => Math.round((Date.now() - startTime) / 1000));
+
+  // Compute the "before" and "after" stats once on mount. `before` reflects
+  // the standing record at the moment DoneScreen renders; `after` simulates
+  // the result of saving this session at Date.now() and is used to animate
+  // the rounds-today / streak increments. For test runs, the session is never
+  // written — so we keep after === before and the values stay static.
+  const [{ before, after }] = useState(() => computeBeforeAfter(test));
+
+  // Stagger the two increments: rounds today first, then streak. Both stay
+  // false in test mode so the displayed values never flip.
+  const [showAfterToday, setShowAfterToday] = useState(false);
+  const [showAfterStreak, setShowAfterStreak] = useState(false);
+  useEffect(() => {
+    if (test) return;
+    const t1 = setTimeout(() => setShowAfterToday(true), 1800);
+    const t2 = setTimeout(() => setShowAfterStreak(true), 2200);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [test]);
+
+  const displayedToday = showAfterToday ? after.today : before.today;
+  const displayedStreak = showAfterStreak ? after.streak : before.streak;
+
   return (
     <main className="min-h-screen flex flex-col px-6 pt-12 pb-8 max-w-md mx-auto">
-      <div className="text-center mb-10">
+      <div className="text-center mb-6">
         <p className="text-xs uppercase tracking-[0.3em] font-mono text-primary">
           {test ? "Test complete" : "Complete"}
         </p>
@@ -379,13 +422,33 @@ function DoneScreen({
           <br />
           work<span className="text-primary">.</span>
         </h1>
-        <p className="text-muted-foreground mt-4">
-          {test ? "Test run — nothing was saved." : "7 minutes well spent."}
-        </p>
+        {test && (
+          <p className="text-muted-foreground mt-4">Test run — nothing was saved.</p>
+        )}
+      </div>
+
+      <CelebrationMark />
+
+      <div className="grid grid-cols-3 gap-3 mt-6">
+        <StatTile delayMs={800} value={formatDuration(durationSeconds)} label="Duration" />
+        <StatTile
+          delayMs={950}
+          value={String(displayedToday)}
+          label={displayedToday === 1 ? "Round today" : "Rounds today"}
+        />
+        <StatTile
+          delayMs={1100}
+          value={String(displayedStreak)}
+          label="Day streak"
+        />
       </div>
 
       {!test && (
-        <div className="rounded-3xl bg-card border border-border p-6 mb-6">
+        <div
+          className="rounded-3xl bg-card border border-border p-6 mt-6"
+          data-celebrate-tile
+          style={{ animation: "celebrate-fade-in 400ms ease-out 1450ms backwards" }}
+        >
           <p className="text-sm text-muted-foreground uppercase tracking-wider mb-4 text-center">
             How hard was that?
           </p>
@@ -412,7 +475,7 @@ function DoneScreen({
         </div>
       )}
 
-      <div className="mt-auto space-y-3">
+      <div className="mt-auto space-y-3 pt-6">
         <button
           onClick={onSave}
           disabled={!test && difficulty == null}
@@ -428,4 +491,140 @@ function DoneScreen({
       </div>
     </main>
   );
+}
+
+function CelebrationMark() {
+  // Lime ring + checkmark, both drawn via stroke-dashoffset animations. Using
+  // pathLength="100" lets us animate dashoffset from 100 → 0 without having
+  // to measure the actual geometric path length.
+  return (
+    <div className="flex items-center justify-center my-2">
+      <svg
+        viewBox="0 0 100 100"
+        className="w-28 h-28"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle
+          cx="50"
+          cy="50"
+          r="44"
+          fill="none"
+          stroke="var(--primary)"
+          strokeWidth="4"
+          pathLength="100"
+          strokeDasharray="100"
+          data-celebrate-ring
+          style={{
+            strokeDashoffset: 100,
+            animation: "celebrate-ring 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards",
+          }}
+        />
+        <path
+          d="M 32 52 L 45 65 L 70 38"
+          fill="none"
+          stroke="var(--primary)"
+          strokeWidth="6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          pathLength="100"
+          strokeDasharray="100"
+          data-celebrate-check
+          style={{
+            strokeDashoffset: 100,
+            animation: "celebrate-check 400ms cubic-bezier(0.4, 0, 0.2, 1) 500ms forwards",
+          }}
+        />
+      </svg>
+    </div>
+  );
+}
+
+function StatTile({
+  value,
+  label,
+  delayMs,
+}: {
+  value: string;
+  label: string;
+  delayMs: number;
+}) {
+  // Track whether StatTile has mounted at least once. The bump animation
+  // should fire when the value *changes* — not on the initial appearance,
+  // which is already covered by the fade-in. The inner span is keyed by
+  // value, so React re-mounts it on each change, and the inline animation
+  // style is applied only after the first paint.
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+  }, []);
+
+  return (
+    <div
+      className="rounded-2xl bg-card border border-border px-2 py-3 text-center"
+      data-celebrate-tile
+      style={{
+        animation: `celebrate-fade-in 400ms cubic-bezier(0.4, 0, 0.2, 1) ${delayMs}ms backwards`,
+      }}
+    >
+      <div className="font-display font-bold text-2xl tabular leading-none">
+        <span
+          key={value}
+          data-celebrate-bump
+          className="inline-block"
+          style={
+            mountedRef.current
+              ? { animation: "celebrate-bump 500ms cubic-bezier(0.4, 0, 0.2, 1)" }
+              : undefined
+          }
+        >
+          {value}
+        </span>
+      </div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1.5 font-mono">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+type Stats = { today: number; streak: number };
+
+function computeBeforeAfter(test: boolean): { before: Stats; after: Stats } {
+  const sessions = loadSessions();
+  const before: Stats = {
+    today: todayCount(sessions),
+    streak: currentStreak(sessions),
+  };
+  if (test) {
+    // Test runs are never written to history, so the displayed values stay
+    // at the standing record. Returning the same object for both halves
+    // means the increment effect's setState calls would be no-ops anyway.
+    return { before, after: before };
+  }
+  // Simulate this session being saved at Date.now(). The helpers only read
+  // `completedAt`, so the other Session fields can be placeholders.
+  const simulated: Session[] = [
+    ...sessions,
+    {
+      id: "_preview",
+      completedAt: Date.now(),
+      durationSeconds: 0,
+      difficulty: 0,
+    },
+  ];
+  return {
+    before,
+    after: {
+      today: todayCount(simulated),
+      streak: currentStreak(simulated),
+    },
+  };
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return s === 0 ? `${m}m` : `${m}m ${s}s`;
 }

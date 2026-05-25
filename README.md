@@ -89,6 +89,20 @@ I'll add to this as I learn. If you have strong opinions about Bun in 2026, I wa
 
 Reverse-chronological. Each entry links to longer-form notes where they exist.
 
+### 2026-05-23 — Closing the workout loop (test tempo + celebration + side-plank split)
+
+Three changes shipped together because they reinforce each other. A `?test=1` URL flag compresses the workout tempo to 5/2/2 seconds AND short-circuits the history write, turning a 7-minute iteration loop into ~84 seconds. With that loop in place, the DoneScreen got a staged celebration: a green ring strokes in, the checkmark draws inside it, the three stat tiles fade up from below, and only then — after the user's eye has landed — the "Today's rounds" and "Day streak" numbers bump if they incremented. `prefers-reduced-motion` collapses the whole thing to the static end-state. And "Side Plank — 30s each side" turned out to be a copy fix for a model bug: the tip said two sides, the timer only counted one. It's now two real entries (Right and Left) in all three routines.
+
+**Patterns I'm internalizing:**
+
+- **Build the test instrument before iterating.** A URL flag that compresses time and skips writes is a small change that pays for itself in two rounds of polish. Animation work is gated by the speed of the iteration cycle; the loop is the asset.
+- **Test instruments must isolate side effects.** Compressing time is fine; mutating real history would have inverted the relationship between the tool and the data. The flag has to guarantee no observable user state is touched — that rule then pulled forward into the partial-save shaping ("test mode writes nothing").
+- **Stage reveals to match the user's questions.** "Did I finish?" → "What did I do?" → "What changed?" arrives in that order, so the animation arrives in that order. Numbers that haven't been on screen yet can't be felt as having changed.
+- **Every flourish needs a quiet fallback.** Animations that convey information must work as a still image when motion is disabled. If turning off motion destroys meaning, the meaning was riding on the motion instead of being supported by it.
+- **Copy that compensates for a wrong model is technical debt.** "30s each side" was the user's job to reconcile because the timer ignored it. Fix the model — two entries, two sides, two timers — and the copy can be honest.
+
+Full notes: [Lessons from Closing the Workout Loop](./documentation/2026-05-23%20Lessons%20from%20Closing%20the%20Workout%20Loop.md)
+
 ### 2026-05-23 — Pointing the rest screen forward
 
 The rest interval was showing the icon of the just-finished exercise and a generic "Catch your breath" label, when the moment is actually about previewing what's coming in 10 seconds. The `index` state correctly tracked the active exercise (including across its trailing rest), but the render block was applying a state-mirroring display contract when it needed a forward-looking one. Fix: introduce a `previewed = phase === "rest" ? (next ?? current) : current` derived value and route icon, name, and tip through it. Mirrors the existing `"First up: <name>"` convention from the ready phase as `"Up next: <name>"`. Net effect: fewer lines of code, correct behavior, no new visual shapes invented.
@@ -220,8 +234,8 @@ The list below comes straight from the [initial audit](./documentation/2026-05-1
 
 - [x] **Acquire a wake lock during workouts** so the screen doesn't dim mid-burpee. Existing one-shot acquire died on the first `visibilitychange`; now lives in a `useWakeLock` hook that re-acquires on visibility and tracks `release` events. ([details](./documentation/2026-05-23%20Lessons%20from%20the%20Hands-Off%20UX%20Polish.md))
 - [x] **Haptic feedback on phase changes** (`navigator.vibrate`) to back up the audio cues. Three buzzes at the phase boundaries (work / rest / finish), not on the tick countdown. iOS Safari has no support — audio carries that platform. ([details](./documentation/2026-05-23%20Lessons%20from%20the%20Hands-Off%20UX%20Polish.md))
-- [ ] **Make "Test run" actually do something.** Either shorten the intervals (5s work / 2s rest) or rename the option to be honest about what it does.
-- [ ] **Save partial workouts on quit.** Right now quitting throws away the progress. At minimum: record that a session was started.
+- [x] **Make "Test run" actually do something.** Now backed by a `?test=1` URL flag that compresses tempo to 5/2/2 seconds AND skips the history write, so the full flow (ready → all exercises → done → save-or-skip) runs in ~84 seconds for fast iteration. ([details](./documentation/2026-05-23%20Lessons%20from%20Closing%20the%20Workout%20Loop.md))
+- [ ] **Save partial workouts on quit.** Right now quitting throws away the progress. At minimum: record that a session was started. (Shaping complete, V1 implementation pending.)
 - [x] **Fix the rest screen.** Previously showed the just-finished exercise's icon and a generic "Catch your breath" label. Now routes icon, name, and tip through a derived `previewed` value that points at the next exercise during rest. Mirrors the existing "First up:" convention as "Up next:". ([details](./documentation/2026-05-23%20Lessons%20from%20Pointing%20the%20Rest%20Screen%20Forward.md))
 - [x] **Match the manifest `background_color` to the actual app background.** Aligned to `#070e16` in V1 of the PWA arc — no more white flash on launch.
 

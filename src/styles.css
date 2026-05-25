@@ -93,3 +93,67 @@
   .font-mono { font-family: var(--font-mono); }
   .tabular { font-variant-numeric: tabular-nums; }
 }
+
+/* Done-screen celebration. Staged so the ring strokes in, the checkmark draws
+   inside it, and the stat tiles fade up — total runtime ~1.4s, after which
+   the screen is static. `pathLength="100"` on the SVG paths normalizes the
+   dash arithmetic regardless of the actual coordinate distances. */
+@keyframes celebrate-ring {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes celebrate-check {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes celebrate-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Brief pulse used when a stat value increments after the tiles have appeared.
+   Pops the number up + tints it lime at peak, then settles back. */
+@keyframes celebrate-bump {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.3);
+    color: var(--primary);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Honor users who opt out of motion — show the final state immediately
+     rather than the staged build-up. */
+  [data-celebrate-ring],
+  [data-celebrate-check] {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+  [data-celebrate-tile],
+  [data-celebrate-bump] {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
