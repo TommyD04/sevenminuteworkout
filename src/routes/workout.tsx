@@ -67,14 +67,17 @@ function WorkoutPage() {
     return ROUTINES.find((r) => r.id === id && !r.locked) ?? ROUTINES[0];
   });
   const EXERCISES = activeRoutine.exercises;
+  const [runId] = useState(() => crypto.randomUUID());
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("ready");
   const [remaining, setRemaining] = useState(tempo.ready);
   const [progress, setProgress] = useState(0); // 0..1, smooth
   const [paused, setPaused] = useState(false);
   const [done, setDone] = useState(false);
+  const [completedDurationSeconds, setCompletedDurationSeconds] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<number | null>(null);
   const [quitOpen, setQuitOpen] = useState(false);
+  const [skippedCount, setSkippedCount] = useState(0);
   const wasPausedBeforeQuitRef = useRef(false);
 
   // Hold the screen wake lock for the full workout, including the post-workout
@@ -85,13 +88,14 @@ function WorkoutPage() {
   // Refs (don't trigger re-render)
   const startTimeRef = useRef<number>(Date.now());
   const phaseStartRef = useRef<number>(performance.now());
-  const pauseOffsetRef = useRef<number>(0); // ms accumulated while paused not used; we shift phaseStart instead
+  const pauseOffsetRef = useRef<number>(0); // ms accumulated while paused
   const pauseAtRef = useRef<number | null>(null);
   const lastRemainingRef = useRef<number>(tempo.ready);
   const phaseRef = useRef<Phase>("ready");
   const indexRef = useRef<number>(0);
   const doneRef = useRef<boolean>(false);
   const pausedRef = useRef<boolean>(false);
+  const skippedExerciseIndexesRef = useRef<Set<number>>(new Set());
 
   // Keep refs in sync
   useEffect(() => {
@@ -109,7 +113,7 @@ function WorkoutPage() {
   useEffect(() => {
     unlockAudio();
     speak(`Get ready. ${EXERCISES[0].name} in ${tempo.ready}.`);
-  }, []);
+  }, [EXERCISES, tempo.ready]);
 
   // Pause / resume: shift phaseStart so elapsed stays continuous
   useEffect(() => {
@@ -118,10 +122,25 @@ function WorkoutPage() {
       pauseAtRef.current = performance.now();
     } else if (pauseAtRef.current != null) {
       const pausedFor = performance.now() - pauseAtRef.current;
+      pauseOffsetRef.current += pausedFor;
       phaseStartRef.current += pausedFor;
       pauseAtRef.current = null;
     }
   }, [paused]);
+
+  function completedExerciseCount() {
+    const p = phaseRef.current;
+    if (doneRef.current) return EXERCISES.length;
+    if (p === "ready") return 0;
+    if (p === "work") return indexRef.current;
+    return indexRef.current + 1;
+  }
+
+  function elapsedActiveSeconds() {
+    const activePause = pauseAtRef.current == null ? 0 : performance.now() - pauseAtRef.current;
+    const elapsedMs = Date.now() - startTimeRef.current - pauseOffsetRef.current - activePause;
+    return Math.max(0, Math.round(elapsedMs / 1000));
+  }
 
   function advancePhase() {
     const p = phaseRef.current;
@@ -140,6 +159,7 @@ function WorkoutPage() {
       if (isLast) {
         finishBeep();
         finishBuzz();
+        setCompletedDurationSeconds(elapsedActiveSeconds());
         doneRef.current = true;
         setDone(true);
         return;
@@ -214,7 +234,38 @@ function WorkoutPage() {
     navigate({ to: "/" });
   }
 
+  function savePartialAndQuit() {
+    if (test) {
+      confirmQuit();
+      return;
+    }
+    const completedExercises = completedExerciseCount();
+    if (completedExercises < 1) {
+      confirmQuit();
+      return;
+    }
+    saveSession({
+      id: crypto.randomUUID(),
+      completedAt: Date.now(),
+      durationSeconds: elapsedActiveSeconds(),
+      difficulty: null,
+      routineId: activeRoutine.id,
+      routineName: activeRoutine.name,
+      status: "partial",
+      completedExercises,
+      totalExercises: EXERCISES.length,
+      skippedCount: skippedExerciseIndexesRef.current.size,
+      sourceRunId: runId,
+    });
+    setQuitOpen(false);
+    navigate({ to: "/" });
+  }
+
   function skip() {
+    if (phaseRef.current === "work") {
+      skippedExerciseIndexesRef.current.add(indexRef.current);
+      setSkippedCount(skippedExerciseIndexesRef.current.size);
+    }
     // Force phase to end immediately
     phaseStartRef.current = performance.now() - phaseDuration(phaseRef.current, tempo) * 1000;
   }
@@ -228,10 +279,15 @@ function WorkoutPage() {
     saveSession({
       id: crypto.randomUUID(),
       completedAt: Date.now(),
-      durationSeconds: Math.round((Date.now() - startTimeRef.current) / 1000),
+      durationSeconds: completedDurationSeconds ?? elapsedActiveSeconds(),
       difficulty,
       routineId: activeRoutine.id,
       routineName: activeRoutine.name,
+      status: "completed",
+      completedExercises: EXERCISES.length,
+      totalExercises: EXERCISES.length,
+      skippedCount: skippedExerciseIndexesRef.current.size,
+      sourceRunId: runId,
     });
     navigate({ to: "/" });
   }
@@ -240,7 +296,7 @@ function WorkoutPage() {
     return (
       <DoneScreen
         test={test}
-        startTime={startTimeRef.current}
+        durationSeconds={completedDurationSeconds ?? elapsedActiveSeconds()}
         difficulty={difficulty}
         setDifficulty={setDifficulty}
         onSave={saveAndExit}
@@ -258,6 +314,9 @@ function WorkoutPage() {
   const PreviewIcon = previewed.icon;
   const ringColor =
     phase === "work" ? "var(--primary)" : phase === "rest" ? "var(--rest)" : "var(--primary)";
+  const partialExercises = completedExerciseCount();
+  const canSavePartial = !test && partialExercises > 0;
+  const skippedLabel = skippedCount === 1 ? "1 skipped" : `${skippedCount} skipped`;
 
   return (
     <main className="min-h-screen flex flex-col px-6 pt-16 pb-8 max-w-md mx-auto">
@@ -353,15 +412,26 @@ function WorkoutPage() {
         <AlertDialogContent className="max-w-sm rounded-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle>Quit this workout?</AlertDialogTitle>
-            <AlertDialogDescription>Your progress won't be saved.</AlertDialogDescription>
+            <AlertDialogDescription>
+              {canSavePartial
+                ? `Save ${partialExercises}/${EXERCISES.length} as a partial workout${
+                    skippedCount > 0 ? ` (${skippedLabel})` : ""
+                  }, or discard this run.`
+                : test
+                  ? "Test runs never save progress."
+                  : "You haven't finished an exercise yet, so there's nothing to save."}
+            </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep going</AlertDialogCancel>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+            <AlertDialogCancel className="mt-0">Keep going</AlertDialogCancel>
+            {canSavePartial && (
+              <AlertDialogAction onClick={savePartialAndQuit}>Save partial</AlertDialogAction>
+            )}
             <AlertDialogAction
               onClick={confirmQuit}
               className={buttonVariants({ variant: "destructive" })}
             >
-              Quit workout
+              {canSavePartial ? "Discard workout" : "Quit workout"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -375,18 +445,14 @@ function DoneScreen({
   difficulty,
   setDifficulty,
   onSave,
-  startTime,
+  durationSeconds,
 }: {
   test: boolean;
   difficulty: number | null;
   setDifficulty: (n: number) => void;
   onSave: () => void;
-  startTime: number;
+  durationSeconds: number;
 }) {
-  // Snapshot duration the moment the done screen mounts. After this, history
-  // can be re-read freely (e.g., StatTile updates) without the duration drifting.
-  const [durationSeconds] = useState(() => Math.round((Date.now() - startTime) / 1000));
-
   // Compute the "before" and "after" stats once on mount. `before` reflects
   // the standing record at the moment DoneScreen renders; `after` simulates
   // the result of saving this session at Date.now() and is used to animate
@@ -422,9 +488,7 @@ function DoneScreen({
           <br />
           work<span className="text-primary">.</span>
         </h1>
-        {test && (
-          <p className="text-muted-foreground mt-4">Test run — nothing was saved.</p>
-        )}
+        {test && <p className="text-muted-foreground mt-4">Test run — nothing was saved.</p>}
       </div>
 
       <CelebrationMark />
@@ -436,11 +500,7 @@ function DoneScreen({
           value={String(displayedToday)}
           label={displayedToday === 1 ? "Round today" : "Rounds today"}
         />
-        <StatTile
-          delayMs={1100}
-          value={String(displayedStreak)}
-          label="Day streak"
-        />
+        <StatTile delayMs={1100} value={String(displayedStreak)} label="Day streak" />
       </div>
 
       {!test && (
@@ -499,12 +559,7 @@ function CelebrationMark() {
   // to measure the actual geometric path length.
   return (
     <div className="flex items-center justify-center my-2">
-      <svg
-        viewBox="0 0 100 100"
-        className="w-28 h-28"
-        aria-hidden="true"
-        focusable="false"
-      >
+      <svg viewBox="0 0 100 100" className="w-28 h-28" aria-hidden="true" focusable="false">
         <circle
           cx="50"
           cy="50"
@@ -540,15 +595,7 @@ function CelebrationMark() {
   );
 }
 
-function StatTile({
-  value,
-  label,
-  delayMs,
-}: {
-  value: string;
-  label: string;
-  delayMs: number;
-}) {
+function StatTile({ value, label, delayMs }: { value: string; label: string; delayMs: number }) {
   // Track whether StatTile has mounted at least once. The bump animation
   // should fire when the value *changes* — not on the initial appearance,
   // which is already covered by the fade-in. The inner span is keyed by
