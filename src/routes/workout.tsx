@@ -17,6 +17,7 @@ import {
   currentStreak,
   saveCheckpoint,
   clearCheckpoint,
+  loadCheckpoint,
   type Session,
 } from "@/lib/storage";
 import { unlockAudio, tickBeep, startBeep, restBeep, finishBeep, speak } from "@/lib/audio";
@@ -38,6 +39,7 @@ export const Route = createFileRoute("/workout")({
   validateSearch: (s: Record<string, unknown>) => ({
     test: s.test === "1" || s.test === 1 || s.test === true,
     routine: typeof s.routine === "string" ? s.routine : undefined,
+    resume: s.resume === "1" || s.resume === 1 || s.resume === true,
   }),
   head: () => ({
     meta: [{ title: "Workout — 7 Minutes" }],
@@ -51,26 +53,115 @@ function phaseDuration(phase: Phase, tempo: Tempo): number {
   return tempo.ready;
 }
 
+type RoutineRecord = (typeof ROUTINES)[number];
+
+type InitialWorkoutState =
+  | {
+      kind: "fresh";
+      routine: RoutineRecord;
+      runId: string;
+      index: number;
+      skippedCount: number;
+      elapsedActiveSeconds: number;
+    }
+  | {
+      kind: "resume";
+      routine: RoutineRecord;
+      runId: string;
+      index: number;
+      skippedCount: number;
+      elapsedActiveSeconds: number;
+    }
+  | { kind: "resume-failed" };
+
+// Compute the initial workout state exactly once. Resume reads localStorage
+// synchronously so the timer ring, top-bar index counter, and audio cue all
+// agree on first paint — a useEffect-based restore would flash "1/13 — Get
+// ready! Jumping Jacks" before snapping to the resumed index. On the server
+// (no `window`) we always fall through to the fresh defaults.
+function computeInitialWorkoutState(
+  resume: boolean,
+  routineParam: string | undefined,
+): InitialWorkoutState {
+  if (resume && typeof window !== "undefined") {
+    const cp = loadCheckpoint();
+    if (!cp) return { kind: "resume-failed" };
+    const routine = ROUTINES.find((r) => r.id === cp.routineId && !r.locked);
+    // Routine missing or locked: don't try to resume into a routine the
+    // user can no longer start. The reconciler's `isRoutineValid` callback
+    // will credit the run as a partial on the next home mount.
+    if (!routine) return { kind: "resume-failed" };
+    if (cp.exerciseIndex < 0 || cp.exerciseIndex >= routine.exercises.length) {
+      return { kind: "resume-failed" };
+    }
+    // Completed-pending checkpoints belong to the reconciler, not Resume:
+    // every exercise is done; what's missing is the difficulty rating /
+    // save tap. The reconciler will write the completed session.
+    if (cp.completedExercises >= cp.totalExercises) {
+      return { kind: "resume-failed" };
+    }
+    return {
+      kind: "resume",
+      routine,
+      runId: cp.runId,
+      index: cp.exerciseIndex,
+      skippedCount: cp.skippedCount,
+      elapsedActiveSeconds: cp.elapsedActiveSeconds,
+    };
+  }
+
+  const id =
+    routineParam ??
+    (typeof window !== "undefined" ? loadSelectedRoutine(DEFAULT_ROUTINE_ID) : DEFAULT_ROUTINE_ID);
+  const routine = ROUTINES.find((r) => r.id === id && !r.locked) ?? ROUTINES[0];
+  return {
+    kind: "fresh",
+    routine,
+    runId: crypto.randomUUID(),
+    index: 0,
+    skippedCount: 0,
+    elapsedActiveSeconds: 0,
+  };
+}
+
 function WorkoutPage() {
-  const navigate = useNavigate();
-  const { test, routine: routineParam } = Route.useSearch();
-  // Test mode compresses the canonical 30/10/5 structure to 5/2/2 so the full
-  // flow (ready → all exercises → done → save-or-skip) finishes in ~84s
-  // without writing a real session to history. `test` comes from the URL and
-  // does not change for the life of the component, so capturing tempo by
-  // closure in the rAF loop below is safe.
+  const { test, routine: routineParam, resume: resumeParam } = Route.useSearch();
+  // Tempo and initial workout state are settled once here so WorkoutBody's
+  // state initializers and refs all derive from the same snapshot. The split
+  // also lets us skip mounting WorkoutBody (and its rAF loop / audio cue)
+  // entirely when Resume fails — see ResumeFailedRedirect.
   const tempo: Tempo = test ? TEST_TEMPO : NORMAL_TEMPO;
-  const [activeRoutine] = useState(() => {
-    const id =
-      routineParam ??
-      (typeof window !== "undefined"
-        ? loadSelectedRoutine(DEFAULT_ROUTINE_ID)
-        : DEFAULT_ROUTINE_ID);
-    return ROUTINES.find((r) => r.id === id && !r.locked) ?? ROUTINES[0];
-  });
+  const [initial] = useState(() => computeInitialWorkoutState(resumeParam, routineParam));
+
+  if (initial.kind === "resume-failed") {
+    return <ResumeFailedRedirect />;
+  }
+
+  return <WorkoutBody initial={initial} test={test} tempo={tempo} />;
+}
+
+function ResumeFailedRedirect() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    navigate({ to: "/" });
+  }, [navigate]);
+  return null;
+}
+
+function WorkoutBody({
+  initial,
+  test,
+  tempo,
+}: {
+  initial: Extract<InitialWorkoutState, { kind: "fresh" | "resume" }>;
+  test: boolean;
+  tempo: Tempo;
+}) {
+  const navigate = useNavigate();
+  const activeRoutine = initial.routine;
   const EXERCISES = activeRoutine.exercises;
-  const [runId] = useState(() => crypto.randomUUID());
-  const [index, setIndex] = useState(0);
+  const [runId] = useState(initial.runId);
+  const [index, setIndex] = useState(initial.index);
   const [phase, setPhase] = useState<Phase>("ready");
   const [remaining, setRemaining] = useState(tempo.ready);
   const [progress, setProgress] = useState(0); // 0..1, smooth
@@ -79,7 +170,7 @@ function WorkoutPage() {
   const [completedDurationSeconds, setCompletedDurationSeconds] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<number | null>(null);
   const [quitOpen, setQuitOpen] = useState(false);
-  const [skippedCount, setSkippedCount] = useState(0);
+  const [skippedCount, setSkippedCount] = useState(initial.skippedCount);
   const wasPausedBeforeQuitRef = useRef(false);
 
   // Hold the screen wake lock for the full workout, including the post-workout
@@ -87,17 +178,26 @@ function WorkoutPage() {
   // lock survives a tab switch / incoming call mid-set.
   useWakeLock(true);
 
-  // Refs (don't trigger re-render)
-  const startTimeRef = useRef<number>(Date.now());
+  // Refs (don't trigger re-render). On Resume, `startTimeRef` is back-dated
+  // so `elapsedActiveSeconds()` returns the persisted active total
+  // immediately, and `indexRef` opens at the resumed index so the rAF loop's
+  // first checkpoint write reflects it. `skippedExerciseIndexesRef` is seeded
+  // with N dummy *negative* indexes so `.size` reads `initial.skippedCount`
+  // while leaving the real (0..N-1) index space free for future skips during
+  // the resumed run — the checkpoint stores only a count, not which
+  // exercises were skipped, so we can't faithfully reconstruct the Set.
+  const startTimeRef = useRef<number>(Date.now() - initial.elapsedActiveSeconds * 1000);
   const phaseStartRef = useRef<number>(performance.now());
   const pauseOffsetRef = useRef<number>(0); // ms accumulated while paused
   const pauseAtRef = useRef<number | null>(null);
   const lastRemainingRef = useRef<number>(tempo.ready);
   const phaseRef = useRef<Phase>("ready");
-  const indexRef = useRef<number>(0);
+  const indexRef = useRef<number>(initial.index);
   const doneRef = useRef<boolean>(false);
   const pausedRef = useRef<boolean>(false);
-  const skippedExerciseIndexesRef = useRef<Set<number>>(new Set());
+  const skippedExerciseIndexesRef = useRef<Set<number>>(
+    new Set(Array.from({ length: initial.skippedCount }, (_, n) => -(n + 1))),
+  );
 
   // Keep refs in sync
   useEffect(() => {
@@ -111,11 +211,13 @@ function WorkoutPage() {
   }, [done]);
 
   // Audio unlock + initial cue. Runs in the same tick as the mount, so the
-  // user-gesture from the preceding "Start" tap is still active.
+  // user-gesture from the preceding "Start" tap is still active. The cue
+  // names the *current* exercise (i.e., `initial.index`) so a Resume picks
+  // up correctly — for a fresh workout, `initial.index === 0`.
   useEffect(() => {
     unlockAudio();
-    speak(`Get ready. ${EXERCISES[0].name} in ${tempo.ready}.`);
-  }, [EXERCISES, tempo.ready]);
+    speak(`Get ready. ${EXERCISES[initial.index].name} in ${tempo.ready}.`);
+  }, [EXERCISES, tempo.ready, initial.index]);
 
   // Pause / resume: shift phaseStart so elapsed stays continuous
   useEffect(() => {
@@ -132,7 +234,11 @@ function WorkoutPage() {
 
   function completedExercisesFor(p: Phase, i: number, doneFlag: boolean): number {
     if (doneFlag) return EXERCISES.length;
-    if (p === "ready") return 0;
+    // `ready` is "about to start exercise i" — completed count equals i. For
+    // a fresh workout that's 0; for a Resume at index 4, that's 4. The
+    // earlier `return 0` here was only correct under the implicit
+    // assumption that ready always meant the start of the workout.
+    if (p === "ready") return i;
     if (p === "work") return i;
     return i + 1; // rest: just finished exercise i
   }
@@ -183,8 +289,8 @@ function WorkoutPage() {
       phaseStartRef.current = performance.now();
       startBeep();
       startBuzz();
-      speak(`${EXERCISES[0].name}.`);
-      writeCheckpoint({ phase: "work", index: 0 });
+      speak(`${EXERCISES[i].name}.`);
+      writeCheckpoint({ phase: "work", index: i });
     } else if (p === "work") {
       const isLast = i === EXERCISES.length - 1;
       if (isLast) {
@@ -441,7 +547,9 @@ function WorkoutPage() {
           {phase === "work"
             ? previewed.name
             : phase === "ready"
-              ? `First up: ${previewed.name}`
+              ? initial.kind === "resume"
+                ? `Resuming: ${previewed.name}`
+                : `First up: ${previewed.name}`
               : `Up next: ${previewed.name}`}
         </h2>
         <p className="text-sm text-muted-foreground mt-2 min-h-[2.5rem]">{previewed.tip}</p>
