@@ -89,6 +89,49 @@ I'll add to this as I learn. If you have strong opinions about Bun in 2026, I wa
 
 Reverse-chronological. Each entry links to longer-form notes where they exist.
 
+### 2026-06-03 — Wiring the checkpoint plumbing (V3 of partial-save)
+
+V1's checkpoint helpers (which had sat unused since they shipped) finally got their callers: `saveCheckpoint` writes on every phase transition in `advancePhase`, `clearCheckpoint({runId})` fires on every terminal path (Save, Discard, Skip, DoneScreen Save, DoneScreen Skip), and `reconcileCheckpoint` runs on home mount _before_ `loadSessions()` so any reconciled row is in the metrics. A rubber-duck pass on the plan caught a bug where DoneScreen's bare `<Link to="/">Skip</Link>` would have let the reconciler resurrect the just-skipped completed run as a difficulty-null history row — fixed by converting Skip to a button that clears the checkpoint first. V4's Resume CTA reads the `fresh` checkpoint state that V3 now produces; no plumbing changes needed on top.
+
+**Patterns I'm internalizing:**
+
+- **Refs lag the state setters that just changed.** A `useEffect` that syncs `ref.current = state` runs _after_ the render that consumed the new state, which is _after_ the synchronous block that called `setState`. Helpers called from inside `advancePhase` had to take post-transition `phase`/`index` as explicit arguments because the refs hadn't caught up yet.
+- **Every explicit terminal user action must clear its checkpoint.** Save, Discard, Skip — all are decisions the user made. The reconciler is for the _implicit_ case (process death, tab close). If an explicit path doesn't clear, reconciliation will reverse the user's decision on the next mount.
+- **RunId-scoped destructive operations replace explicit `if (test)` guards.** Test runs never write a checkpoint with `testRunId`, so `clearCheckpoint({runId: testRunId})` is automatically a no-op against any real checkpoint. The token does the work that a scattered `if (test) return` would have.
+- **Document field semantics when a future slice will read them.** Adding a docstring to `Checkpoint.exerciseIndex` ("next exercise to perform on resume") in V3 removed a decision V4 would otherwise have to make about whether to add a `phase` field. Cheap docs, concrete scope reduction.
+- **Plumbing slices produce values; UI slices consume them.** V3 stores the fresh checkpoint in state but renders nothing. That looks like dead code at the line level; it's actually a seam.
+- **Rubber-duck the plan, not the implementation.** The Skip-resurrection bug got caught in 30 seconds before any code was written. Catching it after would have meant code, lint, build, and re-review cycles to unwind.
+
+Full notes: [Lessons from Wiring the Checkpoint Plumbing](./documentation/2026-06-03%20Lessons%20from%20Wiring%20the%20Checkpoint%20Plumbing.md)
+
+### 2026-05-25 — Lighting up a new schema (V2 of partial-save)
+
+V2 wires up the first real caller of V1's checkpoint schema: the quit dialog grows a third action, "Save partial" (when there's something to save), and the destructive button label shifts from "Quit workout" to "Discard workout" specifically when there's progress on the line. The whole slice is ~80 lines in one file — the smallness is the point, because it's the verdict on V1's design. The diff also retrofits the completed-save path onto `elapsedActiveSeconds()` so paused/dialog time isn't double-counted in either flow; harmonizing the two save paths' duration math while you're already in the file is much cheaper than the eventual bug report.
+
+**Patterns I'm internalizing:**
+
+- **A small first-caller diff is the validation that the schema's right.** V2 wrote every field V1 defined without adding new ones. If V2 had needed to reach back and add `quitReason`, that would have been a signal V1's design was incomplete. The smallness is the evidence.
+- **Name the data event, not the navigation event, in destructive buttons.** "Discard workout" tells the user what happens to their data; "Quit workout" tells them what happens to the screen. When data is at stake, the verb has to point at the data.
+- **Three options frame a different question than two.** Save vs. discard is an outcome decision; cancel vs. quit is a continuation decision. The pre-V2 dialog was implicitly asking the user to throw away their work without giving them the language to ask for credit.
+- **Audit related math when a new caller forces you into the file.** Harmonizing `durationSeconds` accounting across both save paths cost nothing extra; leaving the inconsistency in place would have become someone's bug report in a month.
+- **UI conditionals don't replace handler-level guards.** "Save partial" is only rendered when `completedExercises > 0`, and `savePartialAndQuit` _also_ guards with `if (completedExercises < 1) confirmQuit()`. The UI is the experience guard; the handler is the data guard. They will drift eventually; the handler keeps the data correct in the meantime.
+
+Full notes: [Lessons from the First Caller of a New Schema](./documentation/2026-05-25%20Lessons%20from%20the%20First%20Caller%20of%20a%20New%20Schema.md)
+
+### 2026-05-25 — Landing a schema before its callers (V1 of partial-save)
+
+The partial-save arc was always going to touch six things — schema, reconciliation, write paths, clear paths, history rendering, and a future Resume CTA — and shipping that as one commit would have made every regression and every review comment a search through ~600 lines of diff for the part that mattered. V1 carves off the parts that are pure contract: the `Checkpoint` type, four storage helpers (`loadCheckpoint`, `saveCheckpoint`, `clearCheckpoint`, `reconcileCheckpoint`), an `isCompletedSession` predicate, a new `sourceRunId`-based idempotency on `saveSession`, and every history-page change that depends on the new shape (Partial badge, em-dash for null difficulty, average-difficulty filter, CSV columns). Zero new callers for the helpers; the only path to a partial row is a manual DevTools injection. The interesting design choices are the ones that make V2 and V3 cheap.
+
+**Patterns I'm internalizing:**
+
+- **A schema commit is a contract commit.** Every read site that touches the new shape has to ship in the same commit. Splitting "schema now, history rendering later" creates a half-true period where any developer running V2 against their local history sees broken rows. The bigger commit is paid once; the half-true period is paid by everyone working on the repo until it's fixed.
+- **Idempotency keys come from event identity, not row identity.** `sourceRunId` is the identity of the in-progress workout, carried across both the explicit-save path (V2) and the on-mount reconciler (V3). A UUID generated at save time can't dedupe across two writers; a UUID generated at the start of the conceptual event can.
+- **Reconciliation is a state machine.** Four outcomes (`reconciled-completed`, `fresh`, `reconciled-partial`, `discarded`, plus `none`) collapsed into "if checkpoint, save as partial" would have lost completed-pending recovery and silently destroyed any fresh checkpoint the user wanted to resume. Tagged unions force callers to handle each case explicitly; the compiler catches the missed ones.
+- **RunId-scope every destructive operation.** `clearCheckpoint({runId})` no-ops when the persisted runId doesn't match. That's the safety guarantee that turns "test mode discard" and "multi-tab clobber" from race-condition bugs into automatic correctness without anyone having to think about them.
+- **Back-compat is encoded in the predicate, not asked of every caller.** A missing `status` field reads as `'completed'` because that's what `isCompletedSession(s)` returns for old sessions. Every `todayCount` / `currentStreak` / `last7Days` filter routes through that predicate, so back-compat lives in one place.
+
+Full notes: [Lessons from Landing a Schema Before Its Callers](./documentation/2026-05-25%20Lessons%20from%20Landing%20a%20Schema%20Before%20Its%20Callers.md)
+
 ### 2026-05-23 — Closing the workout loop (test tempo + celebration + side-plank split)
 
 Three changes shipped together because they reinforce each other. A `?test=1` URL flag compresses the workout tempo to 5/2/2 seconds AND short-circuits the history write, turning a 7-minute iteration loop into ~84 seconds. With that loop in place, the DoneScreen got a staged celebration: a green ring strokes in, the checkmark draws inside it, the three stat tiles fade up from below, and only then — after the user's eye has landed — the "Today's rounds" and "Day streak" numbers bump if they incremented. `prefers-reduced-motion` collapses the whole thing to the static end-state. And "Side Plank — 30s each side" turned out to be a copy fix for a model bug: the tip said two sides, the timer only counted one. It's now two real entries (Right and Left) in all three routines.
