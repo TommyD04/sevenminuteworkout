@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Pause, Play, SkipForward, X } from "lucide-react";
 import {
@@ -15,6 +15,8 @@ import {
   loadSessions,
   todayCount,
   currentStreak,
+  saveCheckpoint,
+  clearCheckpoint,
   type Session,
 } from "@/lib/storage";
 import { unlockAudio, tickBeep, startBeep, restBeep, finishBeep, speak } from "@/lib/audio";
@@ -128,18 +130,46 @@ function WorkoutPage() {
     }
   }, [paused]);
 
-  function completedExerciseCount() {
-    const p = phaseRef.current;
-    if (doneRef.current) return EXERCISES.length;
+  function completedExercisesFor(p: Phase, i: number, doneFlag: boolean): number {
+    if (doneFlag) return EXERCISES.length;
     if (p === "ready") return 0;
-    if (p === "work") return indexRef.current;
-    return indexRef.current + 1;
+    if (p === "work") return i;
+    return i + 1; // rest: just finished exercise i
+  }
+
+  function completedExerciseCount() {
+    return completedExercisesFor(phaseRef.current, indexRef.current, doneRef.current);
   }
 
   function elapsedActiveSeconds() {
     const activePause = pauseAtRef.current == null ? 0 : performance.now() - pauseAtRef.current;
     const elapsedMs = Date.now() - startTimeRef.current - pauseOffsetRef.current - activePause;
     return Math.max(0, Math.round(elapsedMs / 1000));
+  }
+
+  // Snapshot the workout into a Checkpoint. Takes the post-transition
+  // `phase`/`index`/`done` explicitly because React state setters are async
+  // and the matching refs lag by a render — when called from inside
+  // `advancePhase`, the new values aren't yet observable via refs. Test
+  // runs are filtered out inside `saveCheckpoint` itself, so callers don't
+  // need to gate on `test`.
+  function writeCheckpoint(next: { phase: Phase; index: number; done?: boolean }) {
+    const completed = completedExercisesFor(next.phase, next.index, next.done ?? false);
+    saveCheckpoint(
+      {
+        runId,
+        routineId: activeRoutine.id,
+        routineName: activeRoutine.name,
+        exerciseIndex: completed,
+        completedExercises: completed,
+        totalExercises: EXERCISES.length,
+        skippedCount: skippedExerciseIndexesRef.current.size,
+        startedAt: startTimeRef.current,
+        updatedAt: Date.now(),
+        elapsedActiveSeconds: elapsedActiveSeconds(),
+      },
+      { test },
+    );
   }
 
   function advancePhase() {
@@ -154,6 +184,7 @@ function WorkoutPage() {
       startBeep();
       startBuzz();
       speak(`${EXERCISES[0].name}.`);
+      writeCheckpoint({ phase: "work", index: 0 });
     } else if (p === "work") {
       const isLast = i === EXERCISES.length - 1;
       if (isLast) {
@@ -162,6 +193,7 @@ function WorkoutPage() {
         setCompletedDurationSeconds(elapsedActiveSeconds());
         doneRef.current = true;
         setDone(true);
+        writeCheckpoint({ phase: "work", index: i, done: true });
         return;
       }
       setPhase("rest");
@@ -172,6 +204,7 @@ function WorkoutPage() {
       restBeep();
       restBuzz();
       speak(`Rest. Next: ${EXERCISES[i + 1].name}.`);
+      writeCheckpoint({ phase: "rest", index: i });
     } else {
       // rest -> next work
       const nextIdx = i + 1;
@@ -184,6 +217,7 @@ function WorkoutPage() {
       startBeep();
       startBuzz();
       speak(`${EXERCISES[nextIdx].name}.`);
+      writeCheckpoint({ phase: "work", index: nextIdx });
     }
   }
 
@@ -230,6 +264,12 @@ function WorkoutPage() {
   }
 
   function confirmQuit() {
+    // Discard: user explicitly chose to abandon the run, so the
+    // checkpoint must not survive to be reconciled or resumed. Scoped to
+    // this runId so a test-mode discard can't blow away a real run's
+    // checkpoint (test mode never writes one, so the runIds won't match
+    // and `clearCheckpoint` will no-op).
+    clearCheckpoint({ runId });
     setQuitOpen(false);
     navigate({ to: "/" });
   }
@@ -257,6 +297,7 @@ function WorkoutPage() {
       skippedCount: skippedExerciseIndexesRef.current.size,
       sourceRunId: runId,
     });
+    clearCheckpoint({ runId });
     setQuitOpen(false);
     navigate({ to: "/" });
   }
@@ -289,6 +330,18 @@ function WorkoutPage() {
       skippedCount: skippedExerciseIndexesRef.current.size,
       sourceRunId: runId,
     });
+    clearCheckpoint({ runId });
+    navigate({ to: "/" });
+  }
+
+  // DoneScreen "Skip" is an explicit user decision not to save *this*
+  // completed run. Without this clear, the checkpoint (written at
+  // work→done with completedExercises === totalExercises) would be
+  // reconciled on the next home mount as a completed-pending session and
+  // resurrect what the user just declined to save. Discarding the
+  // checkpoint here keeps Skip honest.
+  function skipDoneAndExit() {
+    clearCheckpoint({ runId });
     navigate({ to: "/" });
   }
 
@@ -300,6 +353,7 @@ function WorkoutPage() {
         difficulty={difficulty}
         setDifficulty={setDifficulty}
         onSave={saveAndExit}
+        onSkip={skipDoneAndExit}
       />
     );
   }
@@ -445,12 +499,14 @@ function DoneScreen({
   difficulty,
   setDifficulty,
   onSave,
+  onSkip,
   durationSeconds,
 }: {
   test: boolean;
   difficulty: number | null;
   setDifficulty: (n: number) => void;
   onSave: () => void;
+  onSkip: () => void;
   durationSeconds: number;
 }) {
   // Compute the "before" and "after" stats once on mount. `before` reflects
@@ -544,9 +600,13 @@ function DoneScreen({
           {test ? "Done" : "Save"}
         </button>
         {!test && (
-          <Link to="/" className="block text-center text-sm text-muted-foreground py-2">
+          <button
+            type="button"
+            onClick={onSkip}
+            className="block w-full text-center text-sm text-muted-foreground py-2"
+          >
             Skip
-          </Link>
+          </button>
         )}
       </div>
     </main>

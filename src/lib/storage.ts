@@ -119,6 +119,12 @@ export type Checkpoint = {
   runId: string;
   routineId: string;
   routineName: string;
+  // Index of the *next* exercise to perform on resume. Numerically equal
+  // to `completedExercises` in this app: during work of exercise i,
+  // exercise i is still in progress so the "next to perform" is also i;
+  // during the rest after exercise i, exercise i+1 is next. V4's Resume
+  // CTA can use this directly as `setIndex(cp.exerciseIndex)` with a
+  // fresh ready countdown — no phase field needed.
   exerciseIndex: number;
   completedExercises: number;
   totalExercises: number;
@@ -160,10 +166,7 @@ export function loadCheckpoint(): Checkpoint | null {
 // existing real checkpoint when invoked in test mode. This guarantees
 // that `?test=1` runs never disturb the user's real-workout state,
 // per R1 + critique finding 5.
-export function saveCheckpoint(
-  c: Checkpoint,
-  opts: { test?: boolean } = {},
-): void {
+export function saveCheckpoint(c: Checkpoint, opts: { test?: boolean } = {}): void {
   if (typeof window === "undefined") return;
   if (opts.test) return;
   try {
@@ -220,9 +223,7 @@ export type ReconcileOptions = {
 //   - stale or routine missing, above threshold → write a partial
 //     Session and clear (idempotent via `sourceRunId`)
 //   - stale or routine missing, below threshold → clear silently
-export function reconcileCheckpoint(
-  opts: ReconcileOptions = {},
-): ReconcileResult {
+export function reconcileCheckpoint(opts: ReconcileOptions = {}): ReconcileResult {
   if (typeof window === "undefined") return { kind: "none" };
   const cp = loadCheckpoint();
   if (!cp) return { kind: "none" };
@@ -296,9 +297,7 @@ const dayKey = (ts: number) => {
 
 export function todayCount(sessions: Session[]): number {
   const k = dayKey(Date.now());
-  return sessions.filter(
-    (s) => isCompletedSession(s) && dayKey(s.completedAt) === k,
-  ).length;
+  return sessions.filter((s) => isCompletedSession(s) && dayKey(s.completedAt) === k).length;
 }
 
 export function last7Days(sessions: Session[]): { date: Date; count: number }[] {

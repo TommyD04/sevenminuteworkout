@@ -8,6 +8,8 @@ import {
   currentStreak,
   loadSelectedRoutine,
   saveSelectedRoutine,
+  reconcileCheckpoint,
+  type Checkpoint,
   type Session,
 } from "@/lib/storage";
 import { ROUTINES, DEFAULT_ROUTINE_ID } from "@/lib/workout";
@@ -29,10 +31,22 @@ export const Route = createFileRoute("/")({
 function Home() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedRoutine, setSelectedRoutine] = useState<string>(DEFAULT_ROUTINE_ID);
+  // Stored for V4's Resume CTA. V3 only populates the state — there is
+  // no UI yet. The result is `null` unless reconciliation returned a
+  // `fresh` checkpoint (i.e., the user has an in-progress run within
+  // the freshness window against a still-valid routine).
+  const [, setResumable] = useState<Checkpoint | null>(null);
 
   useEffect(() => {
+    // Reconcile BEFORE loading sessions so a freshly-written reconciled
+    // row is included in the metrics (today's count, streak, last-7).
+    // The reconciler is idempotent and SSR-safe on its own.
+    const result = reconcileCheckpoint({
+      isRoutineValid: (id) => ROUTINES.some((r) => r.id === id && !r.locked),
+    });
     setSessions(loadSessions());
     setSelectedRoutine(loadSelectedRoutine(DEFAULT_ROUTINE_ID));
+    setResumable(result.kind === "fresh" ? result.checkpoint : null);
   }, []);
 
   const selectRoutine = (id: string, locked: boolean) => {
@@ -61,9 +75,7 @@ function Home() {
       {/* Today */}
       <section className="rounded-3xl bg-card border border-border p-6 mb-4">
         <div className="flex items-baseline justify-between">
-          <span className="text-sm text-muted-foreground uppercase tracking-wider">
-            Today
-          </span>
+          <span className="text-sm text-muted-foreground uppercase tracking-wider">Today</span>
           <span className="text-5xl font-display font-bold tabular">
             {today}
             <span className="text-lg text-muted-foreground font-normal">
@@ -98,17 +110,12 @@ function Home() {
                       intensity === 0
                         ? "transparent"
                         : `color-mix(in oklab, var(--primary) ${intensity * 33}%, transparent)`,
-                    color:
-                      intensity > 0
-                        ? "var(--primary-foreground)"
-                        : "var(--muted-foreground)",
+                    color: intensity > 0 ? "var(--primary-foreground)" : "var(--muted-foreground)",
                   }}
                 >
                   {d.count > 0 ? d.count : ""}
                 </div>
-                <span className="text-[10px] uppercase text-muted-foreground">
-                  {label}
-                </span>
+                <span className="text-[10px] uppercase text-muted-foreground">{label}</span>
               </div>
             );
           })}
