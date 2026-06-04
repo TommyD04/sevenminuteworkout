@@ -89,6 +89,21 @@ I'll add to this as I learn. If you have strong opinions about Bun in 2026, I wa
 
 Reverse-chronological. Each entry links to longer-form notes where they exist.
 
+### 2026-06-04 — Resume-stale toast (V5 of partial-save)
+
+V5 fills the UX gap V4 left open. V4's click-time revalidation on the Resume CTA was correct on data — no resuming into a stale checkpoint — but silent on outcome: the button disappeared, today's count / streak ticked up, and a partial row showed up in History without ever acknowledging the tap that caused them. From the user's seat, "I tapped Resume and nothing happened." V5 inserts a 2-second top-center toast scoped to exactly that branch, with branch-aware wording (`"Workout timed out — saved to history"` when the reconcile actually wrote a row, bare `"Workout timed out"` when it didn't), no action button (a toast is either a receipt or an undo, not a hybrid), and a shared toast `id` so a frustrated double-tap collapses into one notification. The other two convergent silent paths — Discard and passive mount-time stale — stay deliberately quiet because they don't share the "I tapped a button expecting navigation" expectation.
+
+**Patterns I'm internalizing:**
+
+- **Toast user actions only when the UI's response is the opposite of the expectation.** Discard's "nothing else happens" doesn't need a toast. Passive-stale's "user didn't act" doesn't either. Click-stale Resume's "I tapped, nothing happened" does.
+- **A toast is either a receipt (no action) or an undo (action that reverses the cause).** Hybrid toasts that link to an unrelated affordance reintroduce the decision space the action was supposed to resolve.
+- **Branch-aware wording costs a discriminated-union check and avoids a small lie.** A one-string toast would have claimed "saved to history" on `none` / `discarded` branches that wrote nothing. The user who later checks History and finds nothing now mistrusts every toast.
+- **Exhaustive `switch` with a `never` default at the wording site.** A future arm on `ReconcileResult` surfaces as a TypeScript error at this exact line, forcing the author to think about wording. Without it, the new arm silently gets no toast or the wrong toast.
+- **Shared toast `id` for any handler the user can re-tap within the toast's lifetime.** Sonner replaces same-id toasts instead of stacking; one notification per intent, not one per tap.
+- **`mobileOffset` with a safe-area-inset calc on viewport-fit=cover PWAs.** Without `calc(env(safe-area-inset-top, 0px) + 12px)` the top-center toast clips under the iOS dynamic island and looks like a layout bug.
+
+Full notes: [Lessons from the Resume-Stale Toast](./documentation/2026-06-04%20Lessons%20from%20the%20Resume-Stale%20Toast.md)
+
 ### 2026-06-04 — Resuming mid-workout (V4 of partial-save)
 
 V4 turns V3's silent `fresh` checkpoint state into a Resume / Start over / Discard cluster on the home screen and lifts the implicit "ready only ever happens at index 0" invariant out of `workout.tsx`. The rubber-duck pass on the V4 plan caught four sites in `workout.tsx` that hardcoded `EXERCISES[0]` or `index: 0` — all correct under the old invariant, all wrong the moment a Resume hands the state machine a non-zero starting index. The fix is the `initial`-snapshot pattern: `WorkoutPage` computes a one-time snapshot (`useState(() => compute(...))`), branches on `resume-failed` (rendering a tiny redirect component so the conditional render doesn't conflict with rules-of-hooks), and passes the snapshot into `WorkoutBody`, which seeds every `useState`, every `useRef`, and the initial audio cue from the same source. The home screen pre-clears 0-completed checkpoints (functionally identical to Start over, so no CTA needed), revalidates Resume freshness at click time by re-calling `reconcileCheckpoint` (so a CTA that's been sitting on screen for 30 minutes doesn't bypass the freshness window), and clears the checkpoint _before_ navigating on Start over (so a tab close in the 6-second gap before the new run's first checkpoint write can't resurrect the old run as a partial).
