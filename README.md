@@ -89,6 +89,21 @@ I'll add to this as I learn. If you have strong opinions about Bun in 2026, I wa
 
 Reverse-chronological. Each entry links to longer-form notes where they exist.
 
+### 2026-06-04 — Closing the multi-tab race on Resume (V6 of partial-save)
+
+V6 closes the pre-existing V4 bug V5's rubber-duck pass flagged: `onResume`'s click-time `reconcileCheckpoint()` wasn't scoped to `resumable.runId`, so a second tab writing a different checkpoint between Tab A's home mount and Tab A's Resume tap could either drop the user into the wrong workout (if Tab B's checkpoint was still fresh) or have Tab A write Tab B's run into history on Tab B's behalf (if Tab B's checkpoint had aged past threshold). V6 adds an optional `expectedRunId` to `ReconcileOptions` and a `stale-runid` arm to `ReconcileResult` that returns _before any writing branch_ on mismatch, scopes the three internal `clearCheckpoint()` calls inside `reconcileCheckpoint` to `cp.runId` to close the same race in miniature, and surfaces the new arm through `onResume`'s exhaustive switch with a "Workout no longer available" toast. V5's `never`-typed default caught the new arm as a compile error the moment the union grew — exactly the future-proofing it was designed to provide.
+
+**Patterns I'm internalizing:**
+
+- **The short-circuit goes before the writing branches, not after.** A non-mutating new arm has to return before any side-effect line in the function, or the caller is just being told about damage that's already done.
+- **Audit refresh-in-place loops when adding a new arm to a side-effecting function.** A re-call after the new arm bypasses the guard you just added. V6's first plan included a `discoverResumable()` helper that would have re-introduced the bug via an unscoped re-entry; the rubber-duck pass correctly killed it.
+- **Toast wording describes the local fact, not the inferred remote intent.** "Workout no longer available" is unconditionally true. "Resumed in another tab" assumes the other actor is the user, is resuming, and chose the same routine — none of which is knowable from this tab (think iOS BFCache wake-up).
+- **Propagate scope arguments down the call stack.** When `reconcileCheckpoint` got an `expectedRunId`, the three internal `clearCheckpoint()` calls inside it needed `{ runId: cp.runId }` too. The guarantee leaks otherwise — the race the scope exists to prevent is still present inside the function's own implementation.
+- **A `never`-default exhaustive switch is a forcing function for design conversations.** V5 paid three lines; V6 collected on them. The next slice that adds an arm to the union will get the same compile error at the wording site, asking "what do we say here?" at the moment it can be answered cheaply.
+- **Verification matrix shape beats matrix size.** Four Tab-B-state cases that each exercise a different writing branch (fresh / stale-above-threshold / completed-pending / 0-completed-fresh) catch "guard placed too late" bugs that a single happy-path case would mask.
+
+Full notes: [Lessons from Closing the Multi-Tab Race](./documentation/2026-06-04%20Lessons%20from%20Closing%20the%20Multi-Tab%20Race.md)
+
 ### 2026-06-04 — Resume-stale toast (V5 of partial-save)
 
 V5 fills the UX gap V4 left open. V4's click-time revalidation on the Resume CTA was correct on data — no resuming into a stale checkpoint — but silent on outcome: the button disappeared, today's count / streak ticked up, and a partial row showed up in History without ever acknowledging the tap that caused them. From the user's seat, "I tapped Resume and nothing happened." V5 inserts a 2-second top-center toast scoped to exactly that branch, with branch-aware wording (`"Workout timed out — saved to history"` when the reconcile actually wrote a row, bare `"Workout timed out"` when it didn't), no action button (a toast is either a receipt or an undo, not a hybrid), and a shared toast `id` so a frustrated double-tap collapses into one notification. The other two convergent silent paths — Discard and passive mount-time stale — stay deliberately quiet because they don't share the "I tapped a button expecting navigation" expectation.
