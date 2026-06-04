@@ -200,7 +200,8 @@ export type ReconcileResult =
   | { kind: "fresh"; checkpoint: Checkpoint }
   | { kind: "reconciled-partial"; session: Session }
   | { kind: "reconciled-completed"; session: Session }
-  | { kind: "discarded" };
+  | { kind: "discarded" }
+  | { kind: "stale-runid" };
 
 export type ReconcileOptions = {
   freshnessMs?: number;
@@ -211,12 +212,22 @@ export type ReconcileOptions = {
   // (with the last-known `routineName`). Defaults to always-valid;
   // V4 will pass a real check against the ROUTINES catalog.
   isRoutineValid?: (id: string) => boolean;
+  // Optional runId assertion. When set and the loaded checkpoint's
+  // runId differs, reconcile returns `stale-runid` without writing or
+  // clearing anything — the caller is acting on a stale snapshot and
+  // a different tab may still own the in-storage run. V6's onResume
+  // passes this; mount-time discovery does not.
+  expectedRunId?: string;
   now?: () => number;
 };
 
-// `reconcileCheckpoint` is called on home mount. It branches on the
-// checkpoint's state:
+// `reconcileCheckpoint` is called on home mount (unscoped) and from
+// onResume (scoped via `expectedRunId`). It branches on the checkpoint's
+// state:
 //   - none           → no checkpoint to act on
+//   - stale-runid    → expectedRunId was set and didn't match the stored
+//                      runId; non-mutating so we don't clobber another
+//                      tab's in-progress run
 //   - completed-pending (all exercises done but unsaved) → write a
 //     completed Session with `difficulty: null` and clear
 //   - fresh + routine valid → expose for Resume CTA (no write, no clear)
@@ -227,6 +238,16 @@ export function reconcileCheckpoint(opts: ReconcileOptions = {}): ReconcileResul
   if (typeof window === "undefined") return { kind: "none" };
   const cp = loadCheckpoint();
   if (!cp) return { kind: "none" };
+
+  // RunId guard: if the caller is acting on a specific run (e.g. the
+  // Resume CTA was rendered for runId=A) but storage now holds a
+  // different run (because tab B wrote runId=B in between), return
+  // non-mutating. Tab B may still be alive and finishing its run
+  // cleanly; reconciling its checkpoint into history on its behalf
+  // would create a phantom row that Tab B's own Save can't undo.
+  if (opts.expectedRunId && cp.runId !== opts.expectedRunId) {
+    return { kind: "stale-runid" };
+  }
 
   const freshness = opts.freshnessMs ?? DEFAULT_FRESHNESS_MS;
   const threshold = opts.thresholdExercises ?? DEFAULT_THRESHOLD;
@@ -253,7 +274,7 @@ export function reconcileCheckpoint(opts: ReconcileOptions = {}): ReconcileResul
       sourceRunId: cp.runId,
     };
     saveSession(session);
-    clearCheckpoint();
+    clearCheckpoint({ runId: cp.runId });
     return { kind: "reconciled-completed", session };
   }
 
@@ -276,11 +297,11 @@ export function reconcileCheckpoint(opts: ReconcileOptions = {}): ReconcileResul
       sourceRunId: cp.runId,
     };
     saveSession(session);
-    clearCheckpoint();
+    clearCheckpoint({ runId: cp.runId });
     return { kind: "reconciled-partial", session };
   }
 
-  clearCheckpoint();
+  clearCheckpoint({ runId: cp.runId });
   return { kind: "discarded" };
 }
 

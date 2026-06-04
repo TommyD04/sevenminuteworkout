@@ -78,6 +78,7 @@ function Home() {
     // (navigate) or convert it into a partial session and clear (update
     // home state, no nav).
     const result = reconcileCheckpoint({
+      expectedRunId: resumable.runId,
       isRoutineValid: (id) => ROUTINES.some((r) => r.id === id && !r.locked),
     });
     if (result.kind === "fresh") {
@@ -103,6 +104,15 @@ function Home() {
       case "none":
       case "discarded":
         toast("Workout timed out", { id: "resume-stale" });
+        break;
+      case "stale-runid":
+        // Another tab wrote a different runId between our home mount
+        // and this tap. We deliberately do NOT refresh `resumable` from
+        // storage here — that would re-run the unscoped reconcile and
+        // could write/clear the other tab's checkpoint, which is exactly
+        // the bug this branch exists to prevent. The CTA disappears;
+        // the user can navigate or reload to discover the new state.
+        toast("Workout no longer available", { id: "resume-stale" });
         break;
       default: {
         const _exhaustive: never = result;
