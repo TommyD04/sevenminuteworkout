@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 import appCss from "../styles.css?url";
 import { UpdateBanner } from "@/components/update-banner";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -152,6 +153,11 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <Outlet />
       <UpdateBanner />
+      <Toaster
+        position="top-center"
+        duration={2000}
+        mobileOffset={{ top: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+      />
     </QueryClientProvider>
   );
 }

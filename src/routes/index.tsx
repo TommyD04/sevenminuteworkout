@@ -15,6 +15,7 @@ import {
 } from "@/lib/storage";
 import { ROUTINES, DEFAULT_ROUTINE_ID } from "@/lib/workout";
 import { unlockAudio } from "@/lib/audio";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -87,8 +88,29 @@ function Home() {
       });
       return;
     }
-    // Stale or already-reconciled. Re-pull sessions so any newly written
-    // partial is visible in today's count / streak, and drop the CTA.
+    // Stale or already-reconciled. Tell the user once, briefly — without
+    // this, tapping Resume and getting nothing is indistinguishable from
+    // a broken button. Branch-aware wording: only claim "saved to history"
+    // when something actually was written. The shared `id` dedupes a fast
+    // double-tap into a single toast. Exhaustive switch so a future arm
+    // on ReconcileResult surfaces here as a TypeScript error instead of
+    // silently defaulting to the no-history wording.
+    switch (result.kind) {
+      case "reconciled-partial":
+      case "reconciled-completed":
+        toast("Workout timed out — saved to history", { id: "resume-stale" });
+        break;
+      case "none":
+      case "discarded":
+        toast("Workout timed out", { id: "resume-stale" });
+        break;
+      default: {
+        const _exhaustive: never = result;
+        void _exhaustive;
+      }
+    }
+    // Re-pull sessions so any newly written partial is visible in today's
+    // count / streak, and drop the CTA.
     setSessions(loadSessions());
     setResumable(null);
   }
